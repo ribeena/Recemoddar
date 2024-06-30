@@ -265,7 +265,7 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
         //Widescreen fixes for backgrounds, double resolution
         auto it = widescreenBackgrounds.find(originalFilename);
         if (it != widescreenBackgrounds.end()) {
-            formatType = EncodeFormat(formatType, it->second);
+            scaleFlag = it->second;
         }
     }
 
@@ -421,11 +421,24 @@ void Hooked_GetWindowRect_0047b2e7(HWND param_1, UINT param_2, unsigned int para
     Original_GetWindowRect(param_1, param_2, param_3, param_4);
 }
 
+//char* __cdecl File_get_line_maybe_004346bf(char* filename, void* param_2)
+struct recFile {
+    char* _ptr;
+    int	_cnt;
+    char* _base;
+    int	_flag;
+    int	_file;
+    int	_charbuf;
+    int	_bufsiz;
+    char* _tmpfname;
+};
+
+//00479f4d(char *param_1,char *param_2,int length)
 //Messing around hook code
-typedef void(*Originalunknown_t)(void* param_1);
+typedef int(__cdecl *Originalunknown_t)(char* param_1, char* param_2, int length);
 Originalunknown_t Original_unknown = nullptr;
 
-void Hooked_unknown(void* param_1) {
+int Hooked_unknown(char* param_1, char* param_2, int length) {
     // Log the parameters
     char buffer[256];
     //snprintf(buffer, sizeof(buffer), "param1: x=%f, y=%f, w=%f, h=%f", param_1->x, param_1->y, param_1->w, param_1->h);
@@ -437,13 +450,11 @@ void Hooked_unknown(void* param_1) {
     OutputDebugStringA(buffer);
      */
     //let's mess with the screen
-    uvRect* screenRect = (uvRect*)param_1;
+    //uvRect* screenRect = (uvRect*)param_1;
     //screenRect->w /= 2;
     //screenRect->h /= 2;
 
-    snprintf(buffer, sizeof(buffer), "param1->w: %f param2->h: %f", screenRect->x, screenRect->y);
-
-    OutputDebugStringA(buffer);
+    
     //param_1 /= 2;
     //param_1->w /= 2;
     //param_1->h /= 2;
@@ -452,7 +463,14 @@ void Hooked_unknown(void* param_1) {
     //*(float*)(param_1 + 0x24) /= 2;
 
     // Call the original function
-    Original_unknown((void*)param_1);
+    //bool result = Original_unknown(param_1, param_2, length);
+
+    size_t lenstr = strlen(param_1);
+    if (lenstr > 0 && param_1[lenstr - 1] == ':') {
+        snprintf(buffer, sizeof(buffer), "check starts with: %s, %s", param_1, param_2);
+        OutputDebugStringA(buffer);
+    }
+    return Original_unknown(param_1, param_2, length);
 }
 
 
@@ -532,20 +550,17 @@ extern "C" __declspec(dllexport) void Init() {
     //}
     
     /*
-    * hook 0x099549df (rect*, rect*, void*, int) = crash
-    * hook 0x099549d8 (rect*, rect*, void*, int) = crash
-    * hook 0x004063c7 (rect*, rect*, void*, int) = crash
-    * hook 0x09954f24 (rect*) = crash
+    * hook 0x00479f4d (char*,char*,int) - is used for string parsing
     */
 
-    // Create a hook for letterboxing maybe - exploration code
-    /*if (MH_CreateHook((LPVOID)0x09954f24, &Hooked_unknown, reinterpret_cast<LPVOID*>(&Original_unknown)) != MH_OK) {
-        OutputDebugStringA("MH_CreateHook LetterBox failed");
+    // Create a hook for text line reading
+    /*if (MH_CreateHook((LPVOID)0x00479f4d, &Hooked_unknown, reinterpret_cast<LPVOID*>(&Original_unknown)) != MH_OK) {
+        OutputDebugStringA("MH_CreateHook ReadLine failed");
         return;
     }
 
-    if (MH_EnableHook((LPVOID)0x09954f24) != MH_OK) {
-        OutputDebugStringA("MH_EnableHook LetterBox failed");
+    if (MH_EnableHook((LPVOID)0x00479f4d) != MH_OK) {
+        OutputDebugStringA("MH_EnableHook ReadLine failed");
         return;
     }*/
 
