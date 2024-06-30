@@ -421,19 +421,6 @@ void Hooked_GetWindowRect_0047b2e7(HWND param_1, UINT param_2, unsigned int para
     Original_GetWindowRect(param_1, param_2, param_3, param_4);
 }
 
-//char* __cdecl File_get_line_maybe_004346bf(char* filename, void* param_2)
-struct recFile {
-    char* _ptr;
-    int	_cnt;
-    char* _base;
-    int	_flag;
-    int	_file;
-    int	_charbuf;
-    int	_bufsiz;
-    char* _tmpfname;
-};
-
-//00479f4d(char *param_1,char *param_2,int length)
 //Messing around hook code
 typedef int(__cdecl *Originalunknown_t)(char* param_1, char* param_2, int length);
 Originalunknown_t Original_unknown = nullptr;

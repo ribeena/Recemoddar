@@ -78,7 +78,7 @@ _Only 2x graphics are currently supported for this._
 ## BUGS!
 Yes - proof of concept means bugs!
 - `setDDTexture...` error happens because the patches cause memory leaks, save
-  and restart your game!
+  and restart your game! Thanks to "Just Harry"s memory sluething, could be fixed!
 - `OUT_OF_MEMORY` see above - too late to save now!
 - Letterboxing covers widescreen backgrounds
 - Characters sit too high at times
