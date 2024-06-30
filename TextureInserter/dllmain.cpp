@@ -53,6 +53,8 @@ RECT g_windowRect = { 0 };
 
 std::unordered_map<std::string, int> widescreenBackgrounds;
 
+std::map<astruct*, int> imgPointers;
+
 
 
 void LoadConfiguration() {
@@ -206,6 +208,8 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
         memmove(filename, filename + prefix_len, strlen(filename) - prefix_len + 1);
     }
 
+    int scaleFlag = 0;
+
     int newwidth = width;
     int newheight = height;
 
@@ -221,7 +225,7 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
             filename = newFilename;
             newwidth *= 4;
             newheight *= 4;
-            formatType = EncodeFormat(formatType, 4);
+            scaleFlag = 4;
             sprintf(debugMessage, "4HD DDS File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
             OutputDebugStringA(debugMessage);
         } else if (fileExists(filename4x)) {
@@ -229,7 +233,7 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
             filename = newFilename;
             newwidth *= 4;
             newheight *= 4;
-            formatType = EncodeFormat(formatType, 4);
+            scaleFlag = 4;
             sprintf(debugMessage, "4HD File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
             OutputDebugStringA(debugMessage);
         }
@@ -238,7 +242,7 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
             filename = newFilename;
             newwidth *= 2;
             newheight *= 2;
-            formatType = EncodeFormat(formatType, 2);
+            scaleFlag = 2;
             sprintf(debugMessage, "2HD DDS File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
             OutputDebugStringA(debugMessage);
         }
@@ -247,7 +251,7 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
             filename = newFilename;
             newwidth *= 2;
             newheight *= 2;
-            formatType = EncodeFormat(formatType, 2);
+            scaleFlag = 2;
             sprintf(debugMessage, "2HD File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
             OutputDebugStringA(debugMessage);
         }
@@ -266,11 +270,12 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
     }
 
     // Update the image data pointer with width and height
-    imageDataPtr->width = width;
-    imageDataPtr->height = height;
-    imageDataPtr->format = formatType;
+    imageDataPtr->width = newwidth;
+    imageDataPtr->height = newheight;
 
     OriginalLoadImage(formatType, imageDataPtr, filename, newwidth, newheight);
+
+    imgPointers[imageDataPtr] = scaleFlag;
 }
 
 // Function pointer type for the original function
@@ -321,6 +326,16 @@ void HookedLoadxFileImages(int param_1, char* param_2) {
     originalLoadxFileImages(param_1, param_2);
 }
 
+//Search map for current flag
+bool GetFlagForImageData(astruct* imageDataPtr, int& flag) {
+    auto it = imgPointers.find(imageDataPtr);
+    if (it != imgPointers.end()) {
+        flag = it->second;
+        return true;
+    }
+    return false;
+}
+
 typedef void*(*OriginalUI_UV_Layout_Type)(void*, void*, void*, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);
 OriginalUI_UV_Layout_Type OriginalUI_UV_Layout = nullptr;
 
@@ -334,62 +349,63 @@ void UI_UV_Layout(void* param1, void* param2, void* param3,
     uvRect* screenRect = (uvRect*)param1;
     uvRect* uvr = (uvRect*)param2;
 
-    imgData imgDataCopy = *((imgData*)param3);
-    imgData* imgDataPtr = &imgDataCopy;
+    imgData* imgDataPtr = ((imgData*)param3);
 
-    uint32_t baseFormat = imgDataPtr->format & 0xFFFF; // Remove the format ID from imgDataPtr->format
-    uint32_t formatId = (imgDataPtr->format >> 24) & 0xFF; // Extract the lower 8 bits for the format ID
+    int formatId = 0;
+    
+    if (GetFlagForImageData((astruct*)param3, formatId)) {
 
-    if (formatId == 2) {
-        uvr->x *= 2;
-        uvr->y *= 2;
-        uvr->w *= 2;
-        uvr->h *= 2;
-    } else if (formatId == 4) {
-        uvr->x *= 4;
-        uvr->y *= 4;
-        uvr->w *= 4;
-        uvr->h *= 4;
-    } else {
-        
-        if (formatId == 6) { // Widescreen background, 2x fix
-            // Get the window dimensions
-            float winw = (float)(g_windowRect.right - g_windowRect.left);
-            float winh = (float)(g_windowRect.bottom - g_windowRect.top);
+        if (formatId == 2) {
+            uvr->x *= 2;
+            uvr->y *= 2;
+            uvr->w *= 2;
+            uvr->h *= 2;
+        }
+        else if (formatId == 4) {
+            uvr->x *= 4;
+            uvr->y *= 4;
+            uvr->w *= 4;
+            uvr->h *= 4;
+        }
+        else {
 
-            // Calculate the aspect ratio of the window
-            float screenAspect = winw / winh;
+            if (formatId == 6) { // Widescreen background, 2x fix
+                // Get the window dimensions
+                float winw = (float)(g_windowRect.right - g_windowRect.left);
+                float winh = (float)(g_windowRect.bottom - g_windowRect.top);
 
-            // Original image dimensions
-            float imgWidth = 2048.0f;
-            float imgHeight = 1024.0f;
-            float imgAspect = imgWidth / imgHeight;
+                // Calculate the aspect ratio of the window
+                float screenAspect = winw / winh;
 
-            // Adjust UV coordinates based on aspect ratio
-            if (screenAspect < imgAspect) {
-                // Window is wider than the image
-                uvr->w = imgHeight * screenAspect; // Adjust width based on aspect ratio
-                uvr->h = imgHeight;
-                uvr->x = (imgWidth - uvr->w) / 2; // Center horizontally
-                uvr->y = 0;
+                // Original image dimensions
+                float imgWidth = 2048.0f;
+                float imgHeight = 1024.0f;
+                float imgAspect = imgWidth / imgHeight;
+
+                // Adjust UV coordinates based on aspect ratio
+                if (screenAspect < imgAspect) {
+                    // Window is wider than the image
+                    uvr->w = imgHeight * screenAspect; // Adjust width based on aspect ratio
+                    uvr->h = imgHeight;
+                    uvr->x = (imgWidth - uvr->w) / 2; // Center horizontally
+                    uvr->y = 0;
+                }
+                else {
+                    // Window is taller than the image
+                    uvr->w = imgWidth;
+                    uvr->h = imgWidth / screenAspect; // Adjust height based on aspect ratio
+                    uvr->x = 0;
+                    uvr->y = (imgHeight - uvr->h) / 2; // Center vertically
+                }
+
+                // Adjust the screen rectangle to fill the window
+                screenRect->x = (640.0f * 2.0f - winw) / 4.0f;
+                screenRect->y = (480.0f * 2.0f - winh) / 4.0f;
+                screenRect->w = winw / 2.0f;
+                screenRect->h = winh / 2.0f;
             }
-            else {
-                // Window is taller than the image
-                uvr->w = imgWidth;
-                uvr->h = imgWidth / screenAspect; // Adjust height based on aspect ratio
-                uvr->x = 0;
-                uvr->y = (imgHeight - uvr->h) / 2; // Center vertically
-            }
-
-            // Adjust the screen rectangle to fill the window
-            screenRect->x = (640.0f * 2.0f - winw) / 4.0f;
-            screenRect->y = (480.0f * 2.0f - winh) / 4.0f;
-            screenRect->w = winw / 2.0f;
-            screenRect->h = winh / 2.0f;
         }
     }
-
-    imgDataPtr->format = baseFormat;
 
     // Call the original function
     OriginalUI_UV_Layout((void*)screenRect, (void*)uvr, (void*)imgDataPtr, param4, param5, param6, param7, param8, param9);
