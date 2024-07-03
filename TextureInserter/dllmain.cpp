@@ -1,6 +1,11 @@
-#define _CRT_SECURE_NO_WARNINGS
 
-#include <windows.h>
+#define ZYDIS_STATIC_BUILD
+#define _WIN32
+
+#include "pch.h"
+
+
+
 #include <stdio.h>
 #include <MinHook.h>
 #include <fstream>
@@ -8,6 +13,7 @@
 #include <map>
 #include <iomanip>
 #include <sstream>
+#include <cstdio>
 
 #include "SimpleIniParser.h"
 #include <unordered_map>
@@ -50,6 +56,8 @@ struct imgData {
 
 //Variables for mod
 RECT g_windowRect = { 0 };
+uvRect screenSize;
+uvRect vScreenSize;
 
 std::unordered_map<std::string, int> widescreenBackgrounds;
 
@@ -213,7 +221,7 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
     int newwidth = width;
     int newheight = height;
 
-    strcpy(originalFilename, filename);
+    strcpy_s(originalFilename, filename);
 
     // Find the position of the file extension
     char* dotPos = strrchr(originalFilename, '.');
@@ -221,44 +229,44 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
         modFilenames(originalFilename, filename1x, filename2x, filename2xDDS, filename4x, filename4xDDS);
 
         if (fileExists(filename4xDDS)) {
-            strcpy(newFilename, filename4xDDS);
+            strcpy_s(newFilename, filename4xDDS);
             filename = newFilename;
             newwidth *= 4;
             newheight *= 4;
             scaleFlag = 4;
-            sprintf(debugMessage, "4HD DDS File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
+            sprintf_s(debugMessage, "4HD DDS File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
             OutputDebugStringA(debugMessage);
         } else if (fileExists(filename4x)) {
-            strcpy(newFilename, filename4x);
+            strcpy_s(newFilename, filename4x);
             filename = newFilename;
             newwidth *= 4;
             newheight *= 4;
             scaleFlag = 4;
-            sprintf(debugMessage, "4HD File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
+            sprintf_s(debugMessage, "4HD File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
             OutputDebugStringA(debugMessage);
         }
         else if (fileExists(filename2xDDS)) {
-            strcpy(newFilename, filename2xDDS);
+            strcpy_s(newFilename, filename2xDDS);
             filename = newFilename;
             newwidth *= 2;
             newheight *= 2;
             scaleFlag = 2;
-            sprintf(debugMessage, "2HD DDS File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
+            sprintf_s(debugMessage, "2HD DDS File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
             OutputDebugStringA(debugMessage);
         }
         else if (fileExists(filename2x)) {
-            strcpy(newFilename, filename2x);
+            strcpy_s(newFilename, filename2x);
             filename = newFilename;
             newwidth *= 2;
             newheight *= 2;
             scaleFlag = 2;
-            sprintf(debugMessage, "2HD File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
+            sprintf_s(debugMessage, "2HD File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
             OutputDebugStringA(debugMessage);
         }
         else if (fileExists(filename1x)) {
-            strcpy(newFilename, filename1x);
+            strcpy_s(newFilename, filename1x);
             filename = newFilename;
-            sprintf(debugMessage, "Mod File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
+            sprintf_s(debugMessage, "Mod File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
             OutputDebugStringA(debugMessage);
         }
 
@@ -286,7 +294,7 @@ Load3D_t originalLoad3D = nullptr;
 int HookedLoad3D(int** param_1, char* param_2, int param_3) {
     // Buffer for the new path
     char mods_path[512];
-    sprintf(mods_path, "mods/%s", param_2);
+    sprintf_s(mods_path, "mods/%s", param_2);
 
     // Check if the file exists in the "mods/" directory
     if (fileExists(mods_path)) {
@@ -315,9 +323,10 @@ void HookedLoadxFileImages(int param_1, char* param_2) {
 
     // Buffer for the new path
     char mods_path[512];
-    sprintf(mods_path, "mods/%s", param_2);
+    sprintf_s(mods_path, "mods/%s", param_2);
 
-    FILE* file = fopen(mods_path, "r");
+    FILE* file;
+    errno_t err = fopen_s(&file, mods_path, "r");
     if (fileExists(mods_path)) {
         param_2 = mods_path;
     }
@@ -371,8 +380,8 @@ void UI_UV_Layout(void* param1, void* param2, void* param3,
 
             if (formatId == 6) { // Widescreen background, 2x fix
                 // Get the window dimensions
-                float winw = (float)(g_windowRect.right - g_windowRect.left);
-                float winh = (float)(g_windowRect.bottom - g_windowRect.top);
+                float winw = screenSize.w;
+                float winh = screenSize.h;
 
                 // Calculate the aspect ratio of the window
                 float screenAspect = winw / winh;
@@ -417,6 +426,20 @@ GetWindowRect_0047b2e7_Type Original_GetWindowRect = nullptr;
 void Hooked_GetWindowRect_0047b2e7(HWND param_1, UINT param_2, unsigned int param_3, int* param_4) {
     //store window size
     ::GetWindowRect(param_1, &g_windowRect);
+
+    screenSize = uvRect{};
+    screenSize.x = 0;
+    screenSize.y = 0;
+    screenSize.w = (float)(g_windowRect.right - g_windowRect.left);
+    screenSize.h = (float)(g_windowRect.bottom - g_windowRect.top);
+
+    float ratio = screenSize.w / screenSize.h;
+    vScreenSize = uvRect{};
+    vScreenSize.x = 0;
+    vScreenSize.y = 0;
+    vScreenSize.w = ratio*480;
+    vScreenSize.h = 480;
+
     // Call the original function
     Original_GetWindowRect(param_1, param_2, param_3, param_4);
 }
@@ -461,9 +484,175 @@ int Hooked_unknown(char* param_1, char* param_2, int length) {
 }
 
 
-extern "C" __declspec(dllexport) void Init() {
-    //Get configuration file
-    LoadConfiguration();
+char* AdjustIVTLine(char* line) {
+    char buffer[256];
+    snprintf(buffer, sizeof(buffer), "parsing: %s", line);
+    OutputDebugStringA(buffer);
+    return line;
+}
+
+/*
+SafetyHookInline g_LoadImage_hook{};
+
+// Hook function
+void SHHookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int width, int height) {
+    OutputDebugStringA("SH_LoadImage: HookedLoadImage entered");
+
+    // Your hook logic here
+    char buffer[256];
+    sprintf(buffer, "FormatType: %d, Width: %d, Height: %d", formatType, width, height);
+    OutputDebugStringA(buffer);
+
+    g_LoadImage_hook.stdcall<void>(formatType, imageDataPtr, filename, width, height);
+
+    OutputDebugStringA("SH_LoadImage: HookedLoadImage exiting");
+}
+*/
+
+
+struct HookParams {
+    uintptr_t address;
+    float* xOffset;
+    float* yOffset;
+    float* widthOffset;
+    float* heightOffset;
+    bool relative;
+};
+
+// Hook UVRect for screen drawing function prototype
+void SHAdjustUVRect(safetyhook::Context& ctx, float x, float y, float width, float height, bool relative) {
+    //OutputDebugStringA("SH_AdjustUVRect: Hooked function entered");
+    // Calculate the addresses based on stack pointer (ESP) or other registers
+    float* drawRectX = reinterpret_cast<float*>(ctx.ebp - 0x20); // drawRect.x
+    float* drawRectY = reinterpret_cast<float*>(ctx.ebp - 0x1C); // drawRect.y
+    float* drawRectW = reinterpret_cast<float*>(ctx.ebp - 0x18); // drawRect.w
+    float* drawRectH = reinterpret_cast<float*>(ctx.ebp - 0x14); // drawRect.h
+
+    if (relative) {
+        if (x) {
+            *drawRectX = (x/640)*vScreenSize.w;
+        }
+        else {
+            *drawRectX = (*drawRectX / 640) * vScreenSize.w;
+        }
+        if (y) {
+            *drawRectY = (y / 480) * vScreenSize.h;
+        }
+        else {
+            *drawRectY = (*drawRectY / 480) * vScreenSize.h;
+        }
+    }
+    else {
+        // Modifying the values based on the provided parameters
+        if (x) {
+            *drawRectX = x;
+        }
+        if (y) {
+            *drawRectY = y;
+        }
+    }
+
+    if (width) {
+        *drawRectW = width;
+    }
+    if (height) {
+        *drawRectH = height;
+    }
+}
+
+// Safety hooks
+std::map<uintptr_t, SafetyHookMid> shMidHooks;
+
+// Create the hook object
+SafetyHookMid AdjustMarketTear_hook{};
+
+void SH_Uninitialize() {
+    for (auto& pair : shMidHooks) {
+        pair.second.reset();
+    }
+    shMidHooks.clear();
+}
+
+using MidHookFn = void (*)(safetyhook::Context& ctx);
+void SH_MidHookFactory(uintptr_t address, MidHookFn destination_fn) {
+
+    SafetyHookMid hook = safetyhook::create_mid(reinterpret_cast<void*>(address), destination_fn);
+    if (hook) {
+    }
+    else {
+        OutputDebugStringA("SH_Hooked SafetyHook mid-function setup failed!");
+    }
+
+    shMidHooks[address] = std::move(hook);
+}
+
+void AdjustIVTFilenameHook(safetyhook::Context& ctx) {
+    // Assuming `interprettedFilename` is at a specific offset from the frame pointer
+    char* interprettedFilename = reinterpret_cast<char*>(ctx.ebp - 0x434); // Assuming 0xfffffbc8 is -0x434 in signed offset
+
+    // Buffer for the new path
+    char mods_path[512];
+    sprintf_s(mods_path, "mods/iv/i%s", interprettedFilename);
+    OutputDebugStringA(mods_path);
+
+    FILE* file;
+    errno_t err = fopen_s(&file, mods_path, "r");
+    if (fileExists(mods_path)) {
+        strcpy(interprettedFilename, mods_path);
+    }
+}
+
+void AdjustMarketTear(safetyhook::Context& ctx) {
+    SHAdjustUVRect(ctx, -64, 32, 512, 512, true);
+}
+
+void AdjustMarketRecette(safetyhook::Context& ctx) {
+    float* drawRectX = reinterpret_cast<float*>(ctx.ebp - 0x20); // drawRect.x
+    SHAdjustUVRect(ctx, *drawRectX-32, 32, 512, 512, true);
+}
+
+void AdjustMarketBuyWindow(safetyhook::Context& ctx) {
+    SHAdjustUVRect(ctx, NULL, NULL, NULL, NULL, true);
+}
+
+void AdjustStartBGHook(safetyhook::Context& ctx) {
+    float* width = reinterpret_cast<float*>(ctx.ebp - 0x34);
+    float* height = reinterpret_cast<float*>(ctx.ebp - 0x30);
+    float* x = reinterpret_cast<float*>(ctx.ebp - 0x3c);
+    float* y = reinterpret_cast<float*>(ctx.ebp - 0x38);
+
+    // Adjust the screen rectangle to fill the window
+    *width = screenSize.w/2.0f;
+    *height = screenSize.h / 2.0f;
+    *x = (640.0f * 2.0f - screenSize.w) / 4.0f;
+    *y = (480.0f * 2.0f - screenSize.h) / 4.0f;
+
+    //Adjust UV ratio
+    float* v = reinterpret_cast<float*>(ctx.ebp - 0x14);
+    float* vheight = reinterpret_cast<float*>(ctx.ebp - 0x20);
+    *vheight = *v + (640 * (screenSize.h / screenSize.w));
+}
+
+void AdjustStartBGFadeHook(safetyhook::Context& ctx) {
+    float* width = reinterpret_cast<float*>(ctx.ebp - 0x34);
+    float* height = reinterpret_cast<float*>(ctx.ebp - 0x30);
+    float* x = reinterpret_cast<float*>(ctx.ebp - 0x3c);
+    float* y = reinterpret_cast<float*>(ctx.ebp - 0x38);
+
+    // Adjust the screen rectangle to fill the window
+    *width = screenSize.w / 2.0f;
+    *height = screenSize.h / 2.0f;
+    *x = (640.0f * 2.0f - screenSize.w) / 4.0f;
+    *y = (480.0f * 2.0f - screenSize.h) / 4.0f;
+}
+
+void AdjustStartLogo(safetyhook::Context& ctx) {
+
+    float* x = reinterpret_cast<float*>(ctx.ebp - 0x3c);
+    *x = (*x / 640) * vScreenSize.w;
+}
+
+void CreateMinHooks() {
 
     //Start MinHook
     if (MH_Initialize() != MH_OK) {
@@ -473,7 +662,7 @@ extern "C" __declspec(dllexport) void Init() {
 
     //////////////////////////
     // Create hooks
-    
+
     // Create the Load Image hook
     if (MH_CreateHook((LPVOID)0x0047193C, &HookedLoadImage, reinterpret_cast<LPVOID*>(&OriginalLoadImage)) != MH_OK) {
         OutputDebugStringA("MH_CreateHook HD and redirect image failed");
@@ -490,7 +679,6 @@ extern "C" __declspec(dllexport) void Init() {
         return;
     }
 
-    // Create the hook for thunk_FUN_099549e6 function
     if (MH_CreateHook((LPVOID)0x00404efc, &UI_UV_Layout, reinterpret_cast<LPVOID*>(&OriginalUI_UV_Layout)) != MH_OK) {
         OutputDebugStringA("MH_CreateHook UVTrianglesHook failed");
         return;
@@ -535,7 +723,7 @@ extern "C" __declspec(dllexport) void Init() {
     //    OutputDebugStringA("MH_EnableHook DebugLog failed");
     //    return;
     //}
-    
+
     /*
     * hook 0x00479f4d (char*,char*,int) - is used for string parsing
     */
@@ -554,6 +742,47 @@ extern "C" __declspec(dllexport) void Init() {
     OutputDebugStringA("Hooked modded files redirect successfully");
 }
 
+extern "C" __declspec(dllexport) void Init() {
+    //Get configuration file
+    LoadConfiguration();
+
+    CreateMinHooks();
+
+
+    /////////////////////////////////////////
+    // SafetyHooks for midfunction hooks
+    // 
+
+    // Start screen
+    SH_MidHookFactory(0x0049c84e, AdjustStartLogo);
+    SH_MidHookFactory(0x0049c6fb, AdjustStartBGHook);
+    SH_MidHookFactory(0x0049c763, AdjustStartBGFadeHook);
+
+    // Create the mid-function hook, this address is before the 'finaliseuv' function
+    SH_MidHookFactory(0x00494bc5, AdjustMarketTear);
+    SH_MidHookFactory(0x00494c68, AdjustMarketRecette);
+    SH_MidHookFactory(0x0046b0cb, AdjustMarketBuyWindow);//Buy sell
+    //SH_MidHookFactory(0x0046bc06, AdjustMarketBuyWindow);
+    //SH_MidHookFactory(0x0046bd18, AdjustMarketBuyWindow);
+    //SH_MidHookFactory(0x0046be31, AdjustMarketBuyWindow);
+    //SH_MidHookFactory(0x0043525d, AdjustMarketBuyWindow);
+    //SH_MidHookFactory(0x004937a3, AdjustMarketBuyWindow);//chat bubble - nope crash
+
+    //Event files
+    SH_MidHookFactory(0x0046de19, AdjustIVTFilenameHook);
+
+    // Swap to Safety Hook only...?
+    // Address of the LoadImage function
+    // Create the inline hook
+    //g_LoadImage_hook = safetyhook::create_inline(reinterpret_cast<void*>(0x0047193C), reinterpret_cast<void*>(SHHookedLoadImage));
+    //if (!g_LoadImage_hook) {
+    //    OutputDebugStringA("SH_Hooked Failed to create SafetyHook!");
+    //    return;
+    //}
+    //OutputDebugStringA("SH_Hooked SafetyHook successfully set up!");
+
+}
+
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
     switch (ul_reason_for_call) {
     case DLL_PROCESS_ATTACH:
@@ -562,6 +791,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
         break;
     case DLL_PROCESS_DETACH:
         MH_Uninitialize();
+
+        SH_Uninitialize();
         break;
     }
     return TRUE;
