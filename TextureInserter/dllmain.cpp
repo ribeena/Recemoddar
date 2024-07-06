@@ -376,44 +376,45 @@ void UI_UV_Layout(void* param1, void* param2, void* param3,
             uvr->w *= 4;
             uvr->h *= 4;
         }
-        else {
+        else if (formatId == 6) { // Widescreen background, 2x fix
+            // Calculate the aspect ratio of the window
+            float screenAspect = screenSize.w / screenSize.h;
 
-            if (formatId == 6) { // Widescreen background, 2x fix
-                // Get the window dimensions
-                float winw = screenSize.w;
-                float winh = screenSize.h;
+            // Original image dimensions
+            float imgWidth = 2048.0f;
+            float imgHeight = 1024.0f;
+            float imgAspect = imgWidth / imgHeight;
 
-                // Calculate the aspect ratio of the window
-                float screenAspect = winw / winh;
-
-                // Original image dimensions
-                float imgWidth = 2048.0f;
-                float imgHeight = 1024.0f;
-                float imgAspect = imgWidth / imgHeight;
-
-                // Adjust UV coordinates based on aspect ratio
-                if (screenAspect < imgAspect) {
-                    // Window is wider than the image
-                    uvr->w = imgHeight * screenAspect; // Adjust width based on aspect ratio
-                    uvr->h = imgHeight;
-                    uvr->x = (imgWidth - uvr->w) / 2; // Center horizontally
-                    uvr->y = 0;
-                }
-                else {
-                    // Window is taller than the image
-                    uvr->w = imgWidth;
-                    uvr->h = imgWidth / screenAspect; // Adjust height based on aspect ratio
-                    uvr->x = 0;
-                    uvr->y = (imgHeight - uvr->h) / 2; // Center vertically
-                }
-
-                // Adjust the screen rectangle to fill the window
-                screenRect->x = (640.0f * 2.0f - winw) / 4.0f;
-                screenRect->y = (480.0f * 2.0f - winh) / 4.0f;
-                screenRect->w = winw / 2.0f;
-                screenRect->h = winh / 2.0f;
+            // Adjust UV coordinates based on aspect ratio
+            if (screenAspect < imgAspect) {
+                // Window is wider than the image
+                uvr->w = imgHeight * screenAspect; // Adjust width based on aspect ratio
+                uvr->h = imgHeight;
+                uvr->x = (imgWidth - uvr->w) / 2; // Center horizontally
+                uvr->y = 0;
             }
+            else {
+                // Window is taller than the image
+                uvr->w = imgWidth;
+                uvr->h = imgWidth / screenAspect; // Adjust height based on aspect ratio
+                uvr->x = 0;
+                uvr->y = (imgHeight - uvr->h) / 2; // Center vertically
+            }
+
+            // Adjust the screen rectangle to fill the window
+            screenRect->x = (640.0f * 2.0f - screenSize.w) / 4.0f;
+            screenRect->y = (480.0f * 2.0f - screenSize.h) / 4.0f;
+            screenRect->w = screenSize.w / 2.0f;
+            screenRect->h = screenSize.h / 2.0f;
         }
+        else if (formatId == 8) { // Widescreen stretched
+            // Adjust the screen rectangle to fill the window
+            screenRect->x = (640.0f * 2.0f - screenSize.w) / 4.0f;
+            screenRect->y = (480.0f * 2.0f - screenSize.h) / 4.0f;
+            screenRect->w = screenSize.w / 2.0f;
+            screenRect->h = screenSize.h / 2.0f;
+        }
+        
     }
 
     // Call the original function
@@ -483,13 +484,6 @@ int Hooked_unknown(char* param_1, char* param_2, int length) {
     return Original_unknown(param_1, param_2, length);
 }
 
-
-char* AdjustIVTLine(char* line) {
-    char buffer[256];
-    snprintf(buffer, sizeof(buffer), "parsing: %s", line);
-    OutputDebugStringA(buffer);
-    return line;
-}
 
 /*
 SafetyHookInline g_LoadImage_hook{};
@@ -586,20 +580,48 @@ void SH_MidHookFactory(uintptr_t address, MidHookFn destination_fn) {
     shMidHooks[address] = std::move(hook);
 }
 
-void AdjustIVTFilenameHook(safetyhook::Context& ctx) {
+bool ReadFileToBuffer(const char* filename, std::vector<char>& buffer) {
+    //TODO - adjust lines
+    std::ifstream file(filename, std::ios::binary);
+    if (!file) return false;
+    file.seekg(0, std::ios::end);
+    size_t size = file.tellg();
+    if (size == -1) return false;
+    file.seekg(0, std::ios::beg);
+    buffer.resize(size);
+    file.read(buffer.data(), size);
+    return true;
+}
+
+void AdjustIVTBufferHook(safetyhook::Context& ctx) {
     // Assuming `interprettedFilename` is at a specific offset from the frame pointer
-    char* interprettedFilename = reinterpret_cast<char*>(ctx.ebp - 0x434); // Assuming 0xfffffbc8 is -0x434 in signed offset
+    char* interprettedFilename = reinterpret_cast<char*>(ctx.ebp - 0x434); // Adjust offset if necessary
 
-    // Buffer for the new path
-    char mods_path[512];
+    // Buffer for the new path (must be static to persist after function exits)
+    static char mods_path[512];
     sprintf_s(mods_path, "mods/iv/i%s", interprettedFilename);
-    OutputDebugStringA(mods_path);
 
-    FILE* file;
-    errno_t err = fopen_s(&file, mods_path, "r");
-    if (fileExists(mods_path)) {
-        strcpy(interprettedFilename, mods_path);
+    std::vector<char> moddedBuffer;
+
+    if (ReadFileToBuffer(mods_path, moddedBuffer)) {
+        // Log the modded file path
+        //OutputDebugStringA(mods_path);
+
+        // Replace the content of readBuffer with the content of the modded file
+        char* readBuffer = reinterpret_cast<char*>(ctx.ebx);
+        memcpy(readBuffer, moddedBuffer.data(), moddedBuffer.size());
+        readBuffer[moddedBuffer.size()] = '\0'; // Null-terminate the buffer
+
+        // Log the new buffer content
+        OutputDebugStringA("Modded event loaded.");
     }
+    // EBX holds the address of the readBuffer
+    //char* readBuffer = reinterpret_cast<char*>(ctx.ebx);
+
+    // Print the contents of the readBuffer
+    //char buffer[512];
+    //sprintf_s(buffer, "readBuffer = %.200s", readBuffer);
+    //OutputDebugStringA(buffer);
 }
 
 void AdjustMarketTear(safetyhook::Context& ctx) {
@@ -611,9 +633,51 @@ void AdjustMarketRecette(safetyhook::Context& ctx) {
     SHAdjustUVRect(ctx, *drawRectX-32, 32, 512, 512, true);
 }
 
-void AdjustMarketBuyWindow(safetyhook::Context& ctx) {
-    SHAdjustUVRect(ctx, NULL, NULL, NULL, NULL, true);
+void AdjustMarketBuyItemsWindow(safetyhook::Context& ctx) {
+    float* drawRectX = reinterpret_cast<float*>(ctx.ebp - 0x34); // drawRect.x
+
+    *drawRectX = ((*drawRectX-240) / 640) * vScreenSize.w+240;
 }
+
+void AdjustInitMarketWindow(safetyhook::Context& ctx) {
+    float* drawRectX = reinterpret_cast<float*>(ctx.ebp - 0x48); // drawRect.x
+
+    *drawRectX = ((*drawRectX - 256) / 640) * vScreenSize.w + 256;
+}
+
+void AdjustMarketWindow(safetyhook::Context& ctx) {
+    float* drawRectX = reinterpret_cast<float*>(ctx.ebp - 0x34); // drawRect.x
+
+    *drawRectX = ((*drawRectX - 32) / 640) * vScreenSize.w + 32;
+}
+
+void AdjustDungeonMap(safetyhook::Context& ctx) {
+    float* drawW = reinterpret_cast<float*>(ctx.ebp - 0x10);
+    float* drawX = reinterpret_cast<float*>(ctx.ebp - 0x28);
+    float* uvW = reinterpret_cast<float*>(ctx.ebp - 0x20);
+
+    // Original image dimensions
+    float imgWidth = 750.0f;
+
+    // Window is taller than the image
+    *uvW = imgWidth;
+    *drawX = (640.0f * 2.0f - screenSize.w) / 4.0f + (imgWidth-640);
+    *drawW = imgWidth;
+}
+
+void AdjustDungeonChar(safetyhook::Context& ctx) {
+    float* local_2c_u = reinterpret_cast<float*>(ctx.ebp - 0x28);
+    float* local_2c_v = reinterpret_cast<float*>(ctx.ebp - 0x28 + 4);
+    float* local_2c_uw = reinterpret_cast<float*>(ctx.ebp - 0x28 + 8);
+    float* local_2c_vh = reinterpret_cast<float*>(ctx.ebp - 0x28 + 12);
+
+    // Modify the local variables
+    *local_2c_v = -32;
+    *local_2c_u = -16;
+    *local_2c_uw += 31;
+    *local_2c_vh += 31;
+}
+
 
 void AdjustStartBGHook(safetyhook::Context& ctx) {
     float* width = reinterpret_cast<float*>(ctx.ebp - 0x34);
@@ -724,21 +788,6 @@ void CreateMinHooks() {
     //    return;
     //}
 
-    /*
-    * hook 0x00479f4d (char*,char*,int) - is used for string parsing
-    */
-
-    // Create a hook for text line reading
-    /*if (MH_CreateHook((LPVOID)0x00479f4d, &Hooked_unknown, reinterpret_cast<LPVOID*>(&Original_unknown)) != MH_OK) {
-        OutputDebugStringA("MH_CreateHook ReadLine failed");
-        return;
-    }
-
-    if (MH_EnableHook((LPVOID)0x00479f4d) != MH_OK) {
-        OutputDebugStringA("MH_EnableHook ReadLine failed");
-        return;
-    }*/
-
     OutputDebugStringA("Hooked modded files redirect successfully");
 }
 
@@ -761,15 +810,16 @@ extern "C" __declspec(dllexport) void Init() {
     // Create the mid-function hook, this address is before the 'finaliseuv' function
     SH_MidHookFactory(0x00494bc5, AdjustMarketTear);
     SH_MidHookFactory(0x00494c68, AdjustMarketRecette);
-    SH_MidHookFactory(0x0046b0cb, AdjustMarketBuyWindow);//Buy sell
-    //SH_MidHookFactory(0x0046bc06, AdjustMarketBuyWindow);
-    //SH_MidHookFactory(0x0046bd18, AdjustMarketBuyWindow);
-    //SH_MidHookFactory(0x0046be31, AdjustMarketBuyWindow);
-    //SH_MidHookFactory(0x0043525d, AdjustMarketBuyWindow);
-    //SH_MidHookFactory(0x004937a3, AdjustMarketBuyWindow);//chat bubble - nope crash
+    SH_MidHookFactory(0x0046b0cb, AdjustMarketBuyItemsWindow);//Buy sell
+    SH_MidHookFactory(0x0046bd18, AdjustMarketWindow);//
+    SH_MidHookFactory(0x004940fe, AdjustInitMarketWindow);//The first market window
+
+    //Adventurers Guild
+    SH_MidHookFactory(0x0045d617, AdjustDungeonMap);
+    SH_MidHookFactory(0x0045cda4, AdjustDungeonChar);
 
     //Event files
-    SH_MidHookFactory(0x0046de19, AdjustIVTFilenameHook);
+    SH_MidHookFactory(0x0046de8b, AdjustIVTBufferHook);
 
     // Swap to Safety Hook only...?
     // Address of the LoadImage function
