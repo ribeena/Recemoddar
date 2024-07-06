@@ -754,6 +754,18 @@ void InitFancyScreenPatchIntegration() {
         OutputDebugStringA("The Fancy Screen Patch does not seem to be installed");
         return;
     }
+
+    if (fsp.data->version >= 5) {
+        const auto& functions = *fsp.data->functionTable->functions;
+        functions.startDisablingLeftPillarbox();
+        functions.startDisablingRightPillarbox();
+        functions.startDisablingUpperLetterbox();
+        functions.startDisablingLowerLetterbox();
+
+        OutputDebugStringA("All of the Fancy Screen Patch's black bars have been disabled");
+    } else {
+        OutputDebugStringA("The installed Fancy Screen Patch is too old of a version to do anything with");
+    }
 }
 
 extern "C" __declspec(dllexport) void Init() {
