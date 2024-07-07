@@ -4,8 +4,6 @@
 
 #include "pch.h"
 
-
-
 #include <stdio.h>
 #include <MinHook.h>
 #include <fstream>
@@ -678,6 +676,28 @@ void AdjustDungeonChar(safetyhook::Context& ctx) {
     *local_2c_vh += 31;
 }
 
+void AdjustEquipmentBack(safetyhook::Context& ctx) {
+    short* local_8 = reinterpret_cast<short*>(ctx.ebp - 0x4);
+    float* local_2c_u = reinterpret_cast<float*>(ctx.ebp - 0x28);
+    float* local_2c_v = reinterpret_cast<float*>(ctx.ebp - 0x24);
+
+    // Get the extra items to move offscreen
+    // Setting local_8 didn't work
+    if (*local_8 >= (short)472) {
+    
+        *local_2c_v += 500;
+    }
+}
+
+void AdjustEquipmentInfo(safetyhook::Context& ctx) {
+    float* valueY = reinterpret_cast<float*>(ctx.esp + 4);  // The second argument to UI_ItemWithText_0046add8
+    
+    // Get the extra items to move offscreen
+    if (*valueY > 440) {
+        *valueY += 500.0f;
+    }
+}
+
 
 void AdjustStartBGHook(safetyhook::Context& ctx) {
     float* width = reinterpret_cast<float*>(ctx.ebp - 0x34);
@@ -714,6 +734,26 @@ void AdjustStartLogo(safetyhook::Context& ctx) {
 
     float* x = reinterpret_cast<float*>(ctx.ebp - 0x3c);
     *x = (*x / 640) * vScreenSize.w;
+}
+
+void AdjustEventFade(safetyhook::Context& ctx) {
+    float* screenRect_x = reinterpret_cast<float*>(ctx.ebp - 0x5c);
+    float* screenRect_y = reinterpret_cast<float*>(ctx.ebp - 0x58);
+    float* screenRect_w = reinterpret_cast<float*>(ctx.ebp - 0x54);
+    float* screenRect_h = reinterpret_cast<float*>(ctx.ebp - 0x50);
+
+    *screenRect_x = (640.0f * 2.0f - screenSize.w) / 4.0f;
+    *screenRect_y = (480.0f * 2.0f - screenSize.h) / 4.0f;
+    *screenRect_w = screenSize.w / 2.0f;
+    *screenRect_h = screenSize.h / 2.0f;
+}
+
+void AdjustPauseChar(safetyhook::Context& ctx) {
+    float* screenRect_w = reinterpret_cast<float*>(ctx.ebp - 0x1C);
+    float* screenRect_h = reinterpret_cast<float*>(ctx.ebp - 0x18);
+
+    *screenRect_w += 32;
+    *screenRect_h += 32;
 }
 
 void CreateMinHooks() {
@@ -817,9 +857,16 @@ extern "C" __declspec(dllexport) void Init() {
     //Adventurers Guild
     SH_MidHookFactory(0x0045d617, AdjustDungeonMap);
     SH_MidHookFactory(0x0045cda4, AdjustDungeonChar);
+    SH_MidHookFactory(0x0045cef1, AdjustEquipmentBack);
+    SH_MidHookFactory(0x0045d175, AdjustEquipmentInfo);
 
-    //Event files
+    //Event render and files
     SH_MidHookFactory(0x0046de8b, AdjustIVTBufferHook);
+    SH_MidHookFactory(0x0046d7da, AdjustEventFade);
+    SH_MidHookFactory(0x0046ce66, AdjustEventFade);
+
+    //Pause menus
+    SH_MidHookFactory(0x00480c44, AdjustPauseChar);
 
     // Swap to Safety Hook only...?
     // Address of the LoadImage function
