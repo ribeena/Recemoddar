@@ -59,6 +59,11 @@ uvRect vScreenSize;
 
 std::unordered_map<std::string, int> widescreenBackgrounds;
 
+float characterOffsets = 0;
+bool letterBoxed = false;
+bool debugImagesFound = false;
+bool debugImagesSearched = false;
+
 std::map<astruct*, int> imgPointers;
 
 
@@ -67,6 +72,24 @@ void LoadConfiguration() {
     try {
         SimpleIniParser parser("recemoddar.ini");
         widescreenBackgrounds = parser.getSection("WidescreenBackgrounds");
+
+        // Check if the section "General" and key "CharacterOffsets" exist
+        auto generalSection = parser.getSection("General");
+        if (generalSection.find("CharacterOffsets") != generalSection.end()) {
+            characterOffsets = (float)(generalSection["CharacterOffsets"]);
+        }
+        if (generalSection.find("LetterBoxed") != generalSection.end()) {
+            letterBoxed = (generalSection["LetterBoxed"] == 1);
+        }
+
+        // Check if the section "Debug"
+        auto debugSection = parser.getSection("Debug");
+        if (debugSection.find("ImagesFound") != debugSection.end()) {
+            debugImagesFound = debugSection["ImagesFound"]==1;
+        }
+        if (debugSection.find("ImagesSearched") != debugSection.end()) {
+            debugImagesSearched = debugSection["ImagesSearched"] == 1;
+        }
     }
     catch (const std::runtime_error& e) {
         MessageBoxA(NULL, e.what(), "Error", MB_OK);
@@ -208,6 +231,11 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
     const char* prefix = "mods/";
     const size_t prefix_len = strlen(prefix);
 
+    if (debugImagesSearched) {
+        sprintf_s(debugMessage, "Searching for Modded Image: %s", filename);
+        OutputDebugStringA(debugMessage);
+    }
+
     // Check if filename starts with "mods/"
     if (strncmp(filename, prefix, prefix_len) == 0) {
         // Remove "mods/" by shifting the string left
@@ -232,16 +260,20 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
             newwidth *= 4;
             newheight *= 4;
             scaleFlag = 4;
-            sprintf_s(debugMessage, "4HD DDS File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
-            OutputDebugStringA(debugMessage);
+            if (debugImagesFound) {
+                sprintf_s(debugMessage, "4HD DDS File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
+                OutputDebugStringA(debugMessage);
+            }
         } else if (fileExists(filename4x)) {
             strcpy_s(newFilename, filename4x);
             filename = newFilename;
             newwidth *= 4;
             newheight *= 4;
             scaleFlag = 4;
-            sprintf_s(debugMessage, "4HD File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
-            OutputDebugStringA(debugMessage);
+            if (debugImagesFound) {
+                sprintf_s(debugMessage, "4HD File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
+                OutputDebugStringA(debugMessage);
+            }
         }
         else if (fileExists(filename2xDDS)) {
             strcpy_s(newFilename, filename2xDDS);
@@ -249,8 +281,10 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
             newwidth *= 2;
             newheight *= 2;
             scaleFlag = 2;
-            sprintf_s(debugMessage, "2HD DDS File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
-            OutputDebugStringA(debugMessage);
+            if (debugImagesFound) {
+                sprintf_s(debugMessage, "2HD DDS File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
+                OutputDebugStringA(debugMessage);
+            }
         }
         else if (fileExists(filename2x)) {
             strcpy_s(newFilename, filename2x);
@@ -258,14 +292,18 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
             newwidth *= 2;
             newheight *= 2;
             scaleFlag = 2;
-            sprintf_s(debugMessage, "2HD File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
-            OutputDebugStringA(debugMessage);
+            if (debugImagesFound) {
+                sprintf_s(debugMessage, "2HD File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
+                OutputDebugStringA(debugMessage);
+            }
         }
         else if (fileExists(filename1x)) {
             strcpy_s(newFilename, filename1x);
             filename = newFilename;
-            sprintf_s(debugMessage, "Mod File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
-            OutputDebugStringA(debugMessage);
+            if (debugImagesFound) {
+                sprintf_s(debugMessage, "Mod File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
+                OutputDebugStringA(debugMessage);
+            }
         }
 
         //Widescreen fixes for backgrounds, double resolution
@@ -304,14 +342,21 @@ int HookedLoad3D(int** param_1, char* param_2, int param_3) {
 }
 
 // Function pointer type for the original function
-typedef void(*LoadxFileImages_t)(int param_1, void* param_2);
+typedef void(*LoadxFileImages_t)(astruct* param_1, void* param_2);
 LoadxFileImages_t originalLoadxFileImages = nullptr;
 
 // Hook function, ignoring full FILE type by just taking first variable of it
-void HookedLoadxFileImages(int param_1, char* param_2) {
+void HookedLoadxFileImages(astruct* param_1, char* param_2) {
+
+    char debugMessage[512];
+
+    if (debugImagesSearched) {
+        sprintf_s(debugMessage, "Searching for Modded Image (3D): %s", param_2);
+        OutputDebugStringA(debugMessage);
+    }
+
     const char* prefix = "mods/";
     const size_t prefix_len = strlen(prefix);
-
 
     // Check if filePath starts with "mods/"
     if (strncmp(param_2, prefix, prefix_len) == 0) {
@@ -319,14 +364,121 @@ void HookedLoadxFileImages(int param_1, char* param_2) {
         memmove(param_2, param_2 + prefix_len, strlen(param_2) - prefix_len + 1);
     }
 
-    // Buffer for the new path
+    // String for the new path
     char mods_path[512];
-    sprintf_s(mods_path, "mods/%s", param_2);
+    bool modthere = false;
 
-    FILE* file;
-    errno_t err = fopen_s(&file, mods_path, "r");
-    if (fileExists(mods_path)) {
-        param_2 = mods_path;
+    //sprintf_s(debugMessage, "Mod 3D param_1: %i, %i, %i", param_1->width, param_1->height, param_1->format);
+    //OutputDebugStringA(debugMessage);
+
+    int formatType = 2;//2 = .bmp
+
+    char originalFilename[512];
+    char filename1x[512];
+    char filename2x[512];
+    char filename2xDDS[512];
+    char filename4x[512];
+    char filename4xDDS[512];
+    strcpy_s(originalFilename, param_2);
+
+    // Find the position of the file extension
+    char* dotPos = strrchr(originalFilename, '.');
+
+    // Check for .bmp or .tga extension
+    if (dotPos != nullptr) {
+        if (strcmp(dotPos, ".tga") == 0) {
+            formatType = 12;
+        }
+    }
+
+    if (dotPos != nullptr) {
+        modFilenames(originalFilename, filename1x, filename2x, filename2xDDS, filename4x, filename4xDDS);
+
+        if (fileExists(filename4xDDS)) {
+            strcpy_s(mods_path, filename4xDDS);
+            modthere = true;
+            if (debugImagesFound) {
+                sprintf_s(debugMessage, "4HD DDS 3D image File found: %s", param_2);
+                OutputDebugStringA(debugMessage);
+            }
+        }
+        else if (fileExists(filename4x)) {
+            strcpy_s(mods_path, filename4x);
+            modthere = true;
+            if (debugImagesFound) {
+                sprintf_s(debugMessage, "4HD 3D image File found: %s", param_2);
+                OutputDebugStringA(debugMessage);
+            }
+        }
+        else if (fileExists(filename2xDDS)) {
+            strcpy_s(mods_path, filename2xDDS);
+            modthere = true;
+            if (debugImagesFound) {
+                sprintf_s(debugMessage, "2HD 3D image DDS File found: %s", param_2);
+                OutputDebugStringA(debugMessage);
+            }
+        }
+        else if (fileExists(filename2x)) {
+            strcpy_s(mods_path, filename2x);
+            modthere = true;
+            if (debugImagesFound) {
+                sprintf_s(debugMessage, "2HD 3D image File found: %s", param_2);
+                OutputDebugStringA(debugMessage);
+            }
+        }
+        else if (fileExists(filename1x)) {
+            strcpy_s(mods_path, filename1x);
+            modthere = true;
+            if (debugImagesFound) {
+                sprintf_s(debugMessage, "3D image File found: %s", param_2);
+                OutputDebugStringA(debugMessage);
+            }
+        }
+    }
+
+    if (modthere) {
+        int width = 0;
+        int height = 0;
+
+        std::ifstream file(mods_path, std::ios::binary);
+
+        if (file) {
+            std::vector<char> buffer((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+
+            if (buffer.size() >= 18) { // Ensure the buffer is large enough to contain necessary header information
+                if (formatType == 12) {
+                    width = *(unsigned short*)(&buffer[12]);
+                    height = *(unsigned short*)(&buffer[14]);
+                }
+                else {
+                    width = *(unsigned int*)(&buffer[18]);
+                    height = *(unsigned int*)(&buffer[22]);
+                }
+
+                /*
+                LoadImage allows loading from file, so we are going to use
+                that function instead - one unexpected issue might be the 6th param
+
+                loadXImages
+                ProcessImageData(D3D_073dfcbc, imageBytes, tempResult, width, height, 1, 0, 0, 1, 0xff, 0xff, 0, 0, 0,
+                    (char)imageDataPtr);
+                ProcessImageData(D3D_073dfcbc, imageBytes, puVar2, width, height, 1, 0, 0, 1, 0xff, 0xff, 0, 0, 0,
+                    (char)imageDataPtr);
+
+                loadImages
+                    ProcessImageData(D3D_073dfcbc, imageBuffer, local_10, width, height, 0, 0, 0, 1, 0xff, 0xff, 0, 0, 0,
+                        (undefined)param_1);
+                */
+                OriginalLoadImage(formatType, param_1, mods_path, width, height);
+                return;
+            }
+            else {
+                //std::cerr << "Error: Buffer too small to extract dimensions." << std::endl;
+            }
+        }
+        else {
+            //std::cerr << "Error: Unable to load file: " << newFilename << std::endl;
+        }
     }
 
     // Call the original function
@@ -501,16 +653,6 @@ void SHHookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, in
 }
 */
 
-
-struct HookParams {
-    uintptr_t address;
-    float* xOffset;
-    float* yOffset;
-    float* widthOffset;
-    float* heightOffset;
-    bool relative;
-};
-
 // Hook UVRect for screen drawing function prototype
 void SHAdjustUVRect(safetyhook::Context& ctx, float x, float y, float width, float height, bool relative) {
     //OutputDebugStringA("SH_AdjustUVRect: Hooked function entered");
@@ -623,12 +765,23 @@ void AdjustIVTBufferHook(safetyhook::Context& ctx) {
 }
 
 void AdjustMarketTear(safetyhook::Context& ctx) {
-    SHAdjustUVRect(ctx, -64, 32, 512, 512, true);
+    if (letterBoxed) {
+        SHAdjustUVRect(ctx, characterOffsets * -2, NULL, 512, 512, true);
+    }
+    else {
+        SHAdjustUVRect(ctx, characterOffsets * -2, 32, 512, 512, true);
+    }
 }
 
+// drawRect.x for Recette and Guildmaster
 void AdjustMarketRecette(safetyhook::Context& ctx) {
-    float* drawRectX = reinterpret_cast<float*>(ctx.ebp - 0x20); // drawRect.x
-    SHAdjustUVRect(ctx, *drawRectX-32, 32, 512, 512, true);
+    float* drawRectX = reinterpret_cast<float*>(ctx.ebp - 0x20); 
+    if (letterBoxed) {
+        SHAdjustUVRect(ctx, *drawRectX - (characterOffsets), NULL, 512, 512, true);
+    }
+    else {
+        SHAdjustUVRect(ctx, *drawRectX - (characterOffsets), 32, 512, 512, true);
+    }
 }
 
 void AdjustMarketBuyItemsWindow(safetyhook::Context& ctx) {
@@ -647,6 +800,16 @@ void AdjustMarketWindow(safetyhook::Context& ctx) {
     float* drawRectX = reinterpret_cast<float*>(ctx.ebp - 0x34); // drawRect.x
 
     *drawRectX = ((*drawRectX - 32) / 640) * vScreenSize.w + 32;
+}
+
+void AdjustFusion(safetyhook::Context& ctx) {
+    float* local_50 = reinterpret_cast<float*>(ctx.ebp - 0x4C); // offscreen x
+
+    //char buffer[256];
+    //sprintf(buffer, "local_50: %f", *local_50);
+    //OutputDebugStringA(buffer);
+
+    *local_50 = (*local_50/640)*vScreenSize.w;
 }
 
 void AdjustDungeonMap(safetyhook::Context& ctx) {
@@ -670,10 +833,15 @@ void AdjustDungeonChar(safetyhook::Context& ctx) {
     float* local_2c_vh = reinterpret_cast<float*>(ctx.ebp - 0x28 + 12);
 
     // Modify the local variables
-    *local_2c_v = -32;
-    *local_2c_u = -16;
-    *local_2c_uw += 31;
-    *local_2c_vh += 31;
+    if (letterBoxed) {
+        *local_2c_u = characterOffsets * -1;
+    }
+    else {
+        *local_2c_v = -32;
+        *local_2c_u = characterOffsets * -1;
+        *local_2c_uw += 31;
+        *local_2c_vh += 31;
+    }
 }
 
 void AdjustEquipmentBack(safetyhook::Context& ctx) {
@@ -681,20 +849,74 @@ void AdjustEquipmentBack(safetyhook::Context& ctx) {
     float* local_2c_u = reinterpret_cast<float*>(ctx.ebp - 0x28);
     float* local_2c_v = reinterpret_cast<float*>(ctx.ebp - 0x24);
 
+    *local_2c_u -= characterOffsets*2;
+
     // Get the extra items to move offscreen
     // Setting local_8 didn't work
     if (*local_8 >= (short)472) {
     
         *local_2c_v += 500;
     }
+    else {
+        if (!letterBoxed) {
+            *local_2c_v += 20;
+        }
+    }
 }
 
 void AdjustEquipmentInfo(safetyhook::Context& ctx) {
     float* valueY = reinterpret_cast<float*>(ctx.esp + 4);  // The second argument to UI_ItemWithText_0046add8
-    
+    float* valueX = reinterpret_cast<float*>(ctx.esp + 0);
+
+    *valueX -= characterOffsets*2;
     // Get the extra items to move offscreen
     if (*valueY > 440) {
         *valueY += 500.0f;
+    }
+    else {
+        if (!letterBoxed) {
+            *valueY += 20;
+        }
+    }
+}
+
+void AdjustDungeonCharDescriptTxt(safetyhook::Context& ctx) {
+    float* valueX = reinterpret_cast<float*>(ctx.esp + 0);
+    *valueX -= characterOffsets * 2;
+}
+
+void AdjustDungeonCharPrice(safetyhook::Context& ctx) {
+    float* valueX = reinterpret_cast<float*>(ctx.esp + 0);
+    float* valueY = reinterpret_cast<float*>(ctx.esp + 4);
+    *valueX -= characterOffsets * 2 + 32;
+    *valueY += 2;
+
+    if (!letterBoxed) {
+        *valueY += 20;
+    }
+}
+
+void AdjustDungeonCharPriceBack(safetyhook::Context& ctx) {
+    float* valueU = reinterpret_cast<float*>(ctx.ebp - 0x18);
+    //float* valueV = reinterpret_cast<float*>(ctx.esp + 14); //320
+    float* valueUW = reinterpret_cast<float*>(ctx.ebp - 0x10);
+    float* valueVH = reinterpret_cast<float*>(ctx.ebp - 0xC);
+    float* valueX = reinterpret_cast<float*>(ctx.ebp - 0x28);
+    float* valueY = reinterpret_cast<float*>(ctx.ebp - 0x24);
+    float* valueW = reinterpret_cast<float*>(ctx.ebp - 0x20);
+    float* valueH = reinterpret_cast<float*>(ctx.ebp - 0x1C);
+
+    //New UV, expanded to include more obvious background
+    *valueU = 244.0;
+    *valueUW = 488.0;
+    *valueVH = 365;
+
+    *valueW = 488.0- 244.0;
+    *valueH = 365 - 320;
+
+    *valueX -= characterOffsets * 2 + 42;
+    if (!letterBoxed) {
+        *valueY += 20;
     }
 }
 
@@ -752,8 +974,10 @@ void AdjustPauseChar(safetyhook::Context& ctx) {
     float* screenRect_w = reinterpret_cast<float*>(ctx.ebp - 0x1C);
     float* screenRect_h = reinterpret_cast<float*>(ctx.ebp - 0x18);
 
-    *screenRect_w += 32;
-    *screenRect_h += 32;
+    if (!letterBoxed) {
+        *screenRect_w += 32;
+        *screenRect_h += 32;
+    }
 }
 
 void CreateMinHooks() {
@@ -837,7 +1061,6 @@ extern "C" __declspec(dllexport) void Init() {
 
     CreateMinHooks();
 
-
     /////////////////////////////////////////
     // SafetyHooks for midfunction hooks
     // 
@@ -853,12 +1076,20 @@ extern "C" __declspec(dllexport) void Init() {
     SH_MidHookFactory(0x0046b0cb, AdjustMarketBuyItemsWindow);//Buy sell
     SH_MidHookFactory(0x0046bd18, AdjustMarketWindow);//
     SH_MidHookFactory(0x004940fe, AdjustInitMarketWindow);//The first market window
+    //SH_MidHookFactory(0x00493749, AdjustFusionTitleAndText);
+    SH_MidHookFactory(0x00493683, AdjustFusion);//The offset for fusion menu
 
     //Adventurers Guild
     SH_MidHookFactory(0x0045d617, AdjustDungeonMap);
     SH_MidHookFactory(0x0045cda4, AdjustDungeonChar);
     SH_MidHookFactory(0x0045cef1, AdjustEquipmentBack);
     SH_MidHookFactory(0x0045d175, AdjustEquipmentInfo);
+    SH_MidHookFactory(0x0045cf6b, AdjustDungeonCharPriceBack);
+    SH_MidHookFactory(0x0045d019, AdjustDungeonCharPrice);
+    SH_MidHookFactory(0x0045d054, AdjustDungeonCharDescriptTxt);
+    SH_MidHookFactory(0x0045d091, AdjustDungeonCharDescriptTxt);
+    SH_MidHookFactory(0x0045d0ce, AdjustDungeonCharDescriptTxt);
+    SH_MidHookFactory(0x0045d10b, AdjustDungeonCharDescriptTxt);
 
     //Event render and files
     SH_MidHookFactory(0x0046de8b, AdjustIVTBufferHook);

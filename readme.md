@@ -56,29 +56,51 @@ could be done - these will significant reduce fileszie but may affect quality.
 Using the same format as above, adding `_2x` on any UI graphics mostly work.
 You can also include images without the `_2x` if just replacing the graphics.
 
-#### Widescreen backgrounds
+#### Settings
 You can adjust the `recemoddar.ini` to indicate any backgrounds that have
 been made widescreen and are 2x - this works well with some graphics,
 but others are still covered by black letterboxing.
 
+You can also adjust some offsets which might help with layout issues. 
+letterboxed when set to `1` will try to honor letter boxing (largely untested currently).
+
 Sample ini file
 ```
+[General]
+LetterBoxed=0
+CharacterOffsets=32
+
 [WidescreenBackgrounds]
 bmp/ivent/bg_guild.bmp=6
+bmp/ivent/kuro.tga=8
+bmp/ivent/bg_myroom.bmp=6
+bmp/ivent/bg_myroom2.bmp=6
+bmp/ivent/bg_myroom3.bmp=6
 bmp/ivent/bg_hiro1.bmp=6
 bmp/ivent/bg_hiro2.bmp=6
 bmp/ivent/bg_hiro3.bmp=6
+bmp/ivent/bg_kyoukai.bmp=6
+bmp/ivent/bg_ichiba.bmp=6
+bmp/ivent/bg_ichiba2.bmp=6
+bmp/ivent/bg_sakaba.bmp=6
 bmp/worldmap_night.bmp=6
 bmp/worldmap_nomal.bmp=6
 bmp/worldmap_yugata.bmp=6
 bmp/boukenguild_bg.bmp=6
+bmp/pause_bg_rete.tga=6
+
+[Debug]
+ImagesSearched=0
+ImagesFound=0
 ```
-_Only 2x graphics are currently supported for this._
+_Only 2x graphics are currently supported for WidescreenBackgrounds._
+
+#### Debugging messages
+You can get debugging messages by setting `ImagesSearched=1` etc
 
 ## BUGS!
 Yes - proof of concept means bugs!
-- `setDDTexture...` error happens because the patches cause memory leaks, save
-  and restart your game! Thanks to "Just Harry"s memory sluething, could be fixed!
-- `OUT_OF_MEMORY` see above - too late to save now!
-- Letterboxing covers widescreen backgrounds
-- Characters sit too high at times
+- To allow external file loading the function at 0x00471b24 is ovveridden and
+  uses 0x0047193C to load the files - these call a later function with param_6 
+  set to 1 instead of 0... unsure what effect this will have!
+- wide screen fix calculation might be off for anything other than 1920x1080
