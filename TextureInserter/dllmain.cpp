@@ -16,6 +16,7 @@
 #include "SimpleIniParser.h"
 #include <unordered_map>
 #include <string>
+#include <regex>
 
 #if _WIN64
 #pragma comment(lib, "libMinHook.x64.lib")
@@ -63,6 +64,10 @@ float characterOffsets = 0;
 bool letterBoxed = false;
 bool debugImagesFound = false;
 bool debugImagesSearched = false;
+bool debugEventFiles = false;
+int eventOffscreenAdjustment = -1;
+int eventOffscreenTestValue = 340;
+int eventVerticalOffset = 0;
 
 std::map<astruct*, int> imgPointers;
 
@@ -81,6 +86,23 @@ void LoadConfiguration() {
         if (generalSection.find("LetterBoxed") != generalSection.end()) {
             letterBoxed = (generalSection["LetterBoxed"] == 1);
         }
+        if (generalSection.find("EventOffscreenAdjustment") != generalSection.end()) {
+            eventOffscreenAdjustment = generalSection["EventOffscreenAdjustment"];
+            if (eventOffscreenAdjustment < 0) {
+                if (screenSize.w != NULL) {
+                    eventOffscreenAdjustment = ((screenSize.w / 2) - 640) / 2;
+                }
+                else {
+                    eventOffscreenAdjustment = 0;
+                }
+            }
+        }
+        if (generalSection.find("EventOffscreenTestValue") != generalSection.end()) {
+            eventOffscreenTestValue = generalSection["EventOffscreenTestValue"];
+        }
+        if (generalSection.find("EventVerticalOffset") != generalSection.end()) {
+            eventVerticalOffset = generalSection["EventVerticalOffset"];
+        }
 
         // Check if the section "Debug"
         auto debugSection = parser.getSection("Debug");
@@ -89,6 +111,9 @@ void LoadConfiguration() {
         }
         if (debugSection.find("ImagesSearched") != debugSection.end()) {
             debugImagesSearched = debugSection["ImagesSearched"] == 1;
+        }
+        if (debugSection.find("EventFiles") != debugSection.end()) {
+            debugEventFiles = debugSection["EventFiles"] == 1;
         }
     }
     catch (const std::runtime_error& e) {
@@ -737,31 +762,65 @@ void AdjustIVTBufferHook(safetyhook::Context& ctx) {
     // Assuming `interprettedFilename` is at a specific offset from the frame pointer
     char* interprettedFilename = reinterpret_cast<char*>(ctx.ebp - 0x434); // Adjust offset if necessary
 
+    if (debugEventFiles) {
+        char buffer[512];
+        sprintf_s(buffer, "Showing event: %s", interprettedFilename);
+        OutputDebugStringA(buffer);
+    }
     // Buffer for the new path (must be static to persist after function exits)
     static char mods_path[512];
     sprintf_s(mods_path, "mods/iv/i%s", interprettedFilename);
 
+    // EBX holds the address of the readBuffer
+    char* readBuffer = reinterpret_cast<char*>(ctx.ebx);
+
     std::vector<char> moddedBuffer;
 
     if (ReadFileToBuffer(mods_path, moddedBuffer)) {
-        // Log the modded file path
-        //OutputDebugStringA(mods_path);
-
         // Replace the content of readBuffer with the content of the modded file
-        char* readBuffer = reinterpret_cast<char*>(ctx.ebx);
         memcpy(readBuffer, moddedBuffer.data(), moddedBuffer.size());
         readBuffer[moddedBuffer.size()] = '\0'; // Null-terminate the buffer
 
-        // Log the new buffer content
-        OutputDebugStringA("Modded event loaded.");
+        if (debugEventFiles) {
+            OutputDebugStringA("Loaded modded event.");
+        }
     }
-    // EBX holds the address of the readBuffer
-    //char* readBuffer = reinterpret_cast<char*>(ctx.ebx);
+    
+    // Process the buffer to adjust move and moveto values
+    std::string buffer(readBuffer);
+    std::stringstream ss(buffer);
+    std::string line;
+    std::string result;
 
-    // Print the contents of the readBuffer
-    //char buffer[512];
-    //sprintf_s(buffer, "readBuffer = %.200s", readBuffer);
-    //OutputDebugStringA(buffer);
+    std::regex moveRegex(R"(chr:(\d+):(move|moveto):(-?\d+),(\d+))");
+
+    while (std::getline(ss, line)) {
+        std::smatch match;
+        if (std::regex_search(line, match, moveRegex)) {
+            int chr = std::stoi(match[1].str());
+            std::string command = match[2].str();
+            int x = std::stoi(match[3].str());
+            int y = std::stoi(match[4].str());
+
+            if (eventOffscreenTestValue > 0) {
+                if (x > eventOffscreenTestValue || x < eventOffscreenTestValue * -1) {
+                    x += (x > 0) ? eventOffscreenAdjustment : (eventOffscreenAdjustment * -1);
+                }
+            }
+
+            y += eventVerticalOffset;
+
+            std::stringstream modifiedLine;
+            modifiedLine << "chr:" << chr << ":" << command << ":" << x << "," << y;
+            result += modifiedLine.str() + "\n";
+        }
+        else {
+            result += line + "\n";
+        }
+    }
+
+    // Copy the modified content back to readBuffer
+    strcpy_s(readBuffer, result.size() + 1, result.c_str());
 }
 
 void AdjustMarketTear(safetyhook::Context& ctx) {
