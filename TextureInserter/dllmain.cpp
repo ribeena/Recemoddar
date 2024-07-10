@@ -69,6 +69,10 @@ int eventOffscreenAdjustment = -1;
 int eventOffscreenTestValue = 340;
 int eventVerticalOffset = 0;
 
+//Keeping track of X file loading
+bool loadingXFile = false;
+char lastFilename[512];
+
 std::map<astruct*, int> imgPointers;
 
 
@@ -274,6 +278,8 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
 
     strcpy_s(originalFilename, filename);
 
+    strcpy_s(lastFilename, filename);
+
     // Find the position of the file extension
     char* dotPos = strrchr(originalFilename, '.');
     if (dotPos != nullptr) {
@@ -366,6 +372,38 @@ int HookedLoad3D(int** param_1, char* param_2, int param_3) {
     }
 }
 
+// DDS file header structure (simplified)
+struct DDSHeader {
+    char magic[4];
+    uint32_t size;
+    uint32_t flags;
+    uint32_t height;
+    uint32_t width;
+    // Other fields are not relevant for our purpose
+};
+
+// Function to check if the file is a DDS file and extract dimensions
+bool LoadDDSDimensions(const std::string& filePath, int& width, int& height) {
+    std::ifstream file(filePath, std::ios::binary);
+    if (!file) {
+        return false;
+    }
+
+    DDSHeader header;
+    file.read(reinterpret_cast<char*>(&header), sizeof(DDSHeader));
+    if (!file) {
+        return false;
+    }
+
+    if (std::strncmp(header.magic, "DDS ", 4) != 0) {
+        return false;
+    }
+
+    width = header.width;
+    height = header.height;
+    return true;
+}
+
 // Function pointer type for the original function
 typedef void(*LoadxFileImages_t)(astruct* param_1, void* param_2);
 LoadxFileImages_t originalLoadxFileImages = nullptr;
@@ -392,6 +430,7 @@ void HookedLoadxFileImages(astruct* param_1, char* param_2) {
     // String for the new path
     char mods_path[512];
     bool modthere = false;
+    bool isDDS = false;
 
     //sprintf_s(debugMessage, "Mod 3D param_1: %i, %i, %i", param_1->width, param_1->height, param_1->format);
     //OutputDebugStringA(debugMessage);
@@ -422,6 +461,7 @@ void HookedLoadxFileImages(astruct* param_1, char* param_2) {
         if (fileExists(filename4xDDS)) {
             strcpy_s(mods_path, filename4xDDS);
             modthere = true;
+            isDDS = true;
             if (debugImagesFound) {
                 sprintf_s(debugMessage, "4HD DDS 3D image File found: %s", param_2);
                 OutputDebugStringA(debugMessage);
@@ -438,6 +478,7 @@ void HookedLoadxFileImages(astruct* param_1, char* param_2) {
         else if (fileExists(filename2xDDS)) {
             strcpy_s(mods_path, filename2xDDS);
             modthere = true;
+            isDDS = true;
             if (debugImagesFound) {
                 sprintf_s(debugMessage, "2HD 3D image DDS File found: %s", param_2);
                 OutputDebugStringA(debugMessage);
@@ -465,45 +506,45 @@ void HookedLoadxFileImages(astruct* param_1, char* param_2) {
         int width = 0;
         int height = 0;
 
-        std::ifstream file(mods_path, std::ios::binary);
-
-        if (file) {
-            std::vector<char> buffer((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-
-            if (buffer.size() >= 18) { // Ensure the buffer is large enough to contain necessary header information
-                if (formatType == 12) {
-                    width = *(unsigned short*)(&buffer[12]);
-                    height = *(unsigned short*)(&buffer[14]);
-                }
-                else {
-                    width = *(unsigned int*)(&buffer[18]);
-                    height = *(unsigned int*)(&buffer[22]);
-                }
-
-                /*
-                LoadImage allows loading from file, so we are going to use
-                that function instead - one unexpected issue might be the 6th param
-
-                loadXImages
-                ProcessImageData(D3D_073dfcbc, imageBytes, tempResult, width, height, 1, 0, 0, 1, 0xff, 0xff, 0, 0, 0,
-                    (char)imageDataPtr);
-                ProcessImageData(D3D_073dfcbc, imageBytes, puVar2, width, height, 1, 0, 0, 1, 0xff, 0xff, 0, 0, 0,
-                    (char)imageDataPtr);
-
-                loadImages
-                    ProcessImageData(D3D_073dfcbc, imageBuffer, local_10, width, height, 0, 0, 0, 1, 0xff, 0xff, 0, 0, 0,
-                        (undefined)param_1);
-                */
-                OriginalLoadImage(formatType, param_1, mods_path, width, height);
+        if (isDDS) {
+            if (!LoadDDSDimensions(mods_path, width, height)) {
+                OutputDebugStringA("Error: Unable to load DDS dimensions.");
+                originalLoadxFileImages(param_1, param_2);
                 return;
-            }
-            else {
-                //std::cerr << "Error: Buffer too small to extract dimensions." << std::endl;
             }
         }
         else {
-            //std::cerr << "Error: Unable to load file: " << newFilename << std::endl;
+            std::ifstream file(mods_path, std::ios::binary);
+
+            if (file) {
+                std::vector<char> buffer((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+
+                if (buffer.size() >= 18) { // Ensure the buffer is large enough to contain necessary header information
+                    if (formatType == 12) {
+                        width = *(unsigned short*)(&buffer[12]);
+                        height = *(unsigned short*)(&buffer[14]);
+                    }
+                    else {
+                        width = *(unsigned int*)(&buffer[18]);
+                        height = *(unsigned int*)(&buffer[22]);
+                    }
+                }
+                else {
+                    OutputDebugStringA("Error: Buffer too small to extract dimensions for modded texture");
+                    originalLoadxFileImages(param_1, param_2);
+                    return;
+                }
+            }
+            else {
+                OutputDebugStringA("Error: Unable to load file modded file");
+                originalLoadxFileImages(param_1, param_2);
+                return;
+            }
         }
+
+        loadingXFile = true;
+        OriginalLoadImage(formatType, param_1, mods_path, width, height);
+        return;
     }
 
     // Call the original function
@@ -743,6 +784,18 @@ void SH_MidHookFactory(uintptr_t address, MidHookFn destination_fn) {
     }
 
     shMidHooks[address] = std::move(hook);
+}
+
+void ChangeToLoadXImageSettings(safetyhook::Context& ctx) {
+    // Fix call int LoadImage
+    //     ProcessImageData(D3D_073dfcbc,imageBytes,tempResult,width,height,1,0,0,1,0xff,0xff,0,0,0,imageDataPtr);
+    // to match
+    //     ProcessImageData(D3D_073dfcbc,imageBuffer,local_10,width,height,0,0,0,1,0xff,0xff,0,0,0,param_1);
+    if (loadingXFile) {
+        int* flag = reinterpret_cast<int*>(ctx.esp + 0x18);
+        *flag = 0;
+    }
+    loadingXFile = false;
 }
 
 bool ReadFileToBuffer(const char* filename, std::vector<char>& buffer) {
@@ -1012,9 +1065,15 @@ void AdjustStartBGFadeHook(safetyhook::Context& ctx) {
 }
 
 void AdjustStartLogo(safetyhook::Context& ctx) {
-
     float* x = reinterpret_cast<float*>(ctx.ebp - 0x3c);
-    *x = (*x / 640) * vScreenSize.w;
+    *x = ((*x-64) / 640) * vScreenSize.w+64;
+}
+
+void AdjustStartC(safetyhook::Context& ctx) {
+    float* y = reinterpret_cast<float*>(ctx.ebp - 0x38);
+    if (!letterBoxed) {
+        *y += 28;
+    }
 }
 
 void AdjustEventFade(safetyhook::Context& ctx) {
@@ -1036,6 +1095,78 @@ void AdjustPauseChar(safetyhook::Context& ctx) {
     if (!letterBoxed) {
         *screenRect_w += 32;
         *screenRect_h += 32;
+    }
+}
+
+void AdjustButton3Prompt(safetyhook::Context& ctx) {
+    float* screenRect_h = reinterpret_cast<float*>(ctx.ebp - 0x30);
+
+    if (!letterBoxed) {
+        *screenRect_h += 32;
+    }
+}
+
+// Function to save the buffer as BMP (example implementation)
+void SaveBufferAsBMP(const char* filename, const void* buffer, int width, int height, int bpp) {
+    // BMP file header
+    BITMAPFILEHEADER fileHeader = {};
+    BITMAPINFOHEADER infoHeader = {};
+
+    fileHeader.bfType = 0x4D42; // 'BM'
+    fileHeader.bfSize = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + (width * height * (bpp / 8));
+    fileHeader.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
+
+    infoHeader.biSize = sizeof(BITMAPINFOHEADER);
+    infoHeader.biWidth = width;
+    infoHeader.biHeight = height;
+    infoHeader.biPlanes = 1;
+    infoHeader.biBitCount = bpp;
+    infoHeader.biCompression = BI_RGB;
+    infoHeader.biSizeImage = width * height * (bpp / 8);
+
+    std::ofstream ofs(filename, std::ios::binary);
+    ofs.write(reinterpret_cast<const char*>(&fileHeader), sizeof(fileHeader));
+    ofs.write(reinterpret_cast<const char*>(&infoHeader), sizeof(infoHeader));
+    ofs.write(reinterpret_cast<const char*>(buffer), infoHeader.biSizeImage);
+    ofs.close();
+}
+
+void BeforeImageRelease(safetyhook::Context& ctx) {
+    // Extract necessary parameters from the stack frame
+    //char* filename = reinterpret_cast<char*>(ctx.ebp + 0x34);
+    int width = *reinterpret_cast<int*>(ctx.ebp + 0x14);
+    int height = *reinterpret_cast<int*>(ctx.ebp + 0x18);
+    void* imageBytes = *reinterpret_cast<void**>(ctx.esp + 0);
+
+    // Parameter search for string
+    /*for (int offset = 0x10; offset < 0x50; offset += 0x4) {
+        char* possibleFilename = reinterpret_cast<char*>(ctx.ebp + offset);
+        if (IsBadReadPtr(possibleFilename, 1)) {
+            continue;
+        }
+        if (strlen(possibleFilename) > 0 && strlen(possibleFilename) < 256) {
+            char buffer[256];
+            sprintf(buffer, "%s at (%X)", possibleFilename, offset);
+            OutputDebugStringA(buffer);
+        }
+    }*/
+
+    // Define the special filename to check
+    const char* specialFilename = "bmp/chr/chr00.bmp";
+
+    if (strlen(lastFilename) > 0) {
+        //char buffer[256];
+        //sprintf(buffer, "Clearing img buffer: %s (%i,%i)", lastFilename, width, height);
+        //OutputDebugStringA(buffer);
+
+        // Check if the filename matches the special filename
+        if (strcmp(lastFilename, specialFilename) == 0) {
+            // Save the buffer as BMP
+            SaveBufferAsBMP("output.bmp", imageBytes, width, height, 24); // Assuming 32 bpp
+            OutputDebugStringA("Saved to output.bmp");
+        }
+
+        strcpy_s(lastFilename, "");
     }
 }
 
@@ -1122,10 +1253,14 @@ extern "C" __declspec(dllexport) void Init() {
 
     /////////////////////////////////////////
     // SafetyHooks for midfunction hooks
-    // 
+    //
+    
+    // Fix LoadImage hook
+    SH_MidHookFactory(0x00471ab2, ChangeToLoadXImageSettings);
 
     // Start screen
     SH_MidHookFactory(0x0049c84e, AdjustStartLogo);
+    SH_MidHookFactory(0x0049c7d8, AdjustStartC);
     SH_MidHookFactory(0x0049c6fb, AdjustStartBGHook);
     SH_MidHookFactory(0x0049c763, AdjustStartBGFadeHook);
 
@@ -1137,6 +1272,8 @@ extern "C" __declspec(dllexport) void Init() {
     SH_MidHookFactory(0x004940fe, AdjustInitMarketWindow);//The first market window
     //SH_MidHookFactory(0x00493749, AdjustFusionTitleAndText);
     SH_MidHookFactory(0x00493683, AdjustFusion);//The offset for fusion menu
+
+    SH_MidHookFactory(0x0046be31, AdjustButton3Prompt);
 
     //Adventurers Guild
     SH_MidHookFactory(0x0045d617, AdjustDungeonMap);
@@ -1157,6 +1294,9 @@ extern "C" __declspec(dllexport) void Init() {
 
     //Pause menus
     SH_MidHookFactory(0x00480c44, AdjustPauseChar);
+
+    //Image stuff
+    //SH_MidHookFactory(0x00471b19, BeforeImageRelease);
 
     // Swap to Safety Hook only...?
     // Address of the LoadImage function

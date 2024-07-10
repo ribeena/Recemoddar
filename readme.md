@@ -125,6 +125,9 @@ to see the debugging messages.
 
 ## BUGS!
 Yes - proof of concept means bugs!
+- `setDDTexture...` error happens because the patches cause memory leaks, save
+  and restart your game! Thanks to "Just Harry"s memory sluething this takes longer
+- `OUT_OF_MEMORY` see above - too late to save now!
 - To allow external file loading the function at 0x00471b24 is ovveridden and
   uses 0x0047193C to load the files - these call a later function with param_6 
   set to 1 instead of 0... unsure what effect this will have!
