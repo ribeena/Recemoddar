@@ -65,6 +65,7 @@ bool letterBoxed = false;
 bool debugImagesFound = false;
 bool debugImagesSearched = false;
 bool debugEventFiles = false;
+bool debug3DFiles = false;
 int eventOffscreenAdjustment = -1;
 int eventOffscreenTestValue = 340;
 int eventVerticalOffset = 0;
@@ -118,6 +119,10 @@ void LoadConfiguration() {
         }
         if (debugSection.find("EventFiles") != debugSection.end()) {
             debugEventFiles = debugSection["EventFiles"] == 1;
+        }
+
+        if (debugSection.find("3DFiles") != debugSection.end()) {
+            debug3DFiles = debugSection["3DFiles"] == 1;
         }
     }
     catch (const std::runtime_error& e) {
@@ -353,7 +358,7 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
     imgPointers[imageDataPtr] = scaleFlag;
 }
 
-// Function pointer type for the original function
+// Function pointer type for the Load3d function
 typedef int(*Load3D_t)(int** param_1, char* param_2, int param_3);
 Load3D_t originalLoad3D = nullptr;
 
@@ -363,12 +368,49 @@ int HookedLoad3D(int** param_1, char* param_2, int param_3) {
     char mods_path[512];
     sprintf_s(mods_path, "mods/%s", param_2);
 
+    char debugMessage[512];
+
     // Check if the file exists in the "mods/" directory
     if (fileExists(mods_path)) {
+        if (debug3DFiles) {
+            sprintf_s(debugMessage, "Found modded 3D: %s", param_2);
+            OutputDebugStringA(debugMessage);
+        }
         return originalLoad3D(param_1, mods_path, param_3);
     }
     else {
+        if (debug3DFiles) {
+            sprintf_s(debugMessage, "No modded 3D: %s", mods_path);
+            OutputDebugStringA(debugMessage);
+        }
         return originalLoad3D(param_1, param_2, param_3);
+    }
+}
+// Function pointer type for the Load3dwithAnim function
+typedef void*(__thiscall* Load3DwithAnim_t)(void* this_ptr, char* filepath, uint32_t param_2, uint32_t param_3);
+Load3DwithAnim_t originalLoad3DwithAnim = nullptr;
+
+void* __fastcall HookedLoad3DwithAnim(void* this_ptr, void* edx, char* filepath, uint32_t param_2, uint32_t param_3) {
+    // Buffer for the new path
+    char mods_path[512];
+    sprintf_s(mods_path, "mods/%s", filepath);
+
+    char debugMessage[512];
+
+    // Check if the file exists in the "mods/" directory
+    if (fileExists(mods_path)) {
+        if (debug3DFiles) {
+            sprintf_s(debugMessage, "Found modded 3D (Anim): %s", filepath);
+            OutputDebugStringA(debugMessage);
+        }
+        return originalLoad3DwithAnim(this_ptr, mods_path, param_2, param_3);
+    }
+    else {
+        if (debug3DFiles) {
+            sprintf_s(debugMessage, "No modded 3D (Anim): %s", mods_path);
+            OutputDebugStringA(debugMessage);
+        }
+        return originalLoad3DwithAnim(this_ptr, filepath, param_2, param_3);
     }
 }
 
@@ -1192,6 +1234,11 @@ void CreateMinHooks() {
         return;
     }
 
+    if (MH_CreateHook((LPVOID)0x00403b6e, &HookedLoad3DwithAnim, reinterpret_cast<LPVOID*>(&originalLoad3DwithAnim)) != MH_OK) {
+        OutputDebugStringA("MH_CreateHook 3D (Animated) redirect failed");
+        return;
+    }
+
     if (MH_CreateHook((LPVOID)0x00471b24, &HookedLoadxFileImages, reinterpret_cast<LPVOID*>(&originalLoadxFileImages)) != MH_OK) {
         OutputDebugStringA("MH_CreateHook 3D image redirect failed");
         return;
@@ -1212,6 +1259,11 @@ void CreateMinHooks() {
     // Activate all the hooks
     if (MH_EnableHook((LPVOID)0x0047193C) != MH_OK) {
         OutputDebugStringA("MH_EnableHook 3D redirect failed");
+        return;
+    }
+
+    if (MH_EnableHook((LPVOID)0x00403b6e) != MH_OK) {
+        OutputDebugStringA("MH_EnableHook 3D (Animated) redirect failed");
         return;
     }
 
