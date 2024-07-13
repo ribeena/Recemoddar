@@ -1140,6 +1140,85 @@ void AdjustPauseChar(safetyhook::Context& ctx) {
     }
 }
 
+unsigned int pauseSubmenu = -1;
+
+void AdjustPauseRecTe(safetyhook::Context& ctx) {
+    float* screenRect_x = reinterpret_cast<float*>(ctx.ebp - 0x40);
+    float* screenRect_y = reinterpret_cast<float*>(ctx.ebp - 0x3C);
+
+    // Read the global variable
+    int menuTransitionValue = *reinterpret_cast<int*>(0x074b2880);
+    
+    // Read the value of DAT_074b2878
+    int index = *reinterpret_cast<int*>(0x074b2878);
+    // Read the value from the array at DAT_074b2844 using the index
+    int currentMenu = *reinterpret_cast<int*>(0x074b2844 + index * sizeof(int));
+
+    if (pauseSubmenu != currentMenu) {
+        //char buffer[256];
+        //sprintf(buffer, "pauseSubmenu set to %i", currentMenu);
+        //OutputDebugStringA(buffer);
+        pauseSubmenu = currentMenu;
+    }
+
+    if (pauseSubmenu == 0 || pauseSubmenu == 1) {//no sub, items
+        *screenRect_x += characterOffsets * 1.5 + (((float)menuTransitionValue) / 10 * -320);
+    }
+    else if (pauseSubmenu == 6 || pauseSubmenu == 3){//encyclopedia, save
+        *screenRect_x += characterOffsets * 1.5;
+        //alpha to 0
+        unsigned int alphaFadeAmount = (unsigned int)menuTransitionValue * 0x1a;
+        if (255 < alphaFadeAmount) {
+            alphaFadeAmount = 255;
+        }
+        alphaFadeAmount = 255 - alphaFadeAmount;
+
+        //set forth param
+        unsigned int* color_param = reinterpret_cast<unsigned int*>(ctx.esp + 0xC);
+        *color_param = alphaFadeAmount << 24 | 0x00ffffff;
+    }
+    else if (pauseSubmenu == 2) {//options
+        float perc = (float)menuTransitionValue / 10.0;
+        *screenRect_x += characterOffsets * 1.5 + (perc * (-320 - characterOffsets));
+    }
+    else {
+        *screenRect_x += characterOffsets * 1.5;
+    }
+
+    if (!letterBoxed) {
+        *screenRect_y += 32;
+    }
+}
+
+void AdjustPauseMainMenu(safetyhook::Context& ctx) {
+    float* screenRect_x = reinterpret_cast<float*>(ctx.ebp - 0x40);
+
+    float amount = characterOffsets * 4;
+    if (*screenRect_x <= 432) {
+        amount = (*screenRect_x/432)*(characterOffsets * 4);
+    }
+
+
+    *screenRect_x += amount;
+
+}
+
+void AdjustPauseMenuTitle(safetyhook::Context& ctx) {
+    float* screenRect_x = reinterpret_cast<float*>(ctx.ebp - 0x40);
+    float* screenRect_y = reinterpret_cast<float*>(ctx.ebp - 0x3C);
+
+    *screenRect_x -= 368 + 128 + (characterOffsets/2);
+    if (!letterBoxed) {
+        *screenRect_y += 38;
+    }
+}
+
+void AdjustPauseMenuCal(safetyhook::Context& ctx) {
+    float* local_8 = reinterpret_cast<float*>(ctx.ebp - 0x4);
+
+    *local_8 += (640.0f * 2.0f - screenSize.w) / 4.0f;
+}
+
 void AdjustButton3Prompt(safetyhook::Context& ctx) {
     float* screenRect_h = reinterpret_cast<float*>(ctx.ebp - 0x30);
 
@@ -1346,6 +1425,11 @@ extern "C" __declspec(dllexport) void Init() {
 
     //Pause menus
     SH_MidHookFactory(0x00480c44, AdjustPauseChar);
+    SH_MidHookFactory(0x0048216a, AdjustPauseRecTe);
+    SH_MidHookFactory(0x00482368, AdjustPauseMainMenu);
+    SH_MidHookFactory(0x004823ff, AdjustPauseMainMenu);
+    SH_MidHookFactory(0x0048248f, AdjustPauseMenuTitle);
+    SH_MidHookFactory(0x004824c8, AdjustPauseMenuCal);
 
     //Image stuff
     //SH_MidHookFactory(0x00471b19, BeforeImageRelease);
