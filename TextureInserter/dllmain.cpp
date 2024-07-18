@@ -1,4 +1,5 @@
 
+
 #define ZYDIS_STATIC_BUILD
 #define _WIN32
 
@@ -21,8 +22,10 @@
 #if _WIN64
 #pragma comment(lib, "libMinHook.x64.lib")
 #else
-#pragma comment(lib, "libMinHook.x86.lib")
+#pragma comment(lib, "D:\\game modding\\Recettear\\DDSInserter\\TextureInserter\\lib\\Release\\libMinHook.x86.lib")
 #endif
+
+#include "d3d_renderers.h"
 
 typedef struct {
     int width;
@@ -75,7 +78,6 @@ bool loadingXFile = false;
 char lastFilename[512];
 
 std::map<astruct*, int> imgPointers;
-
 
 
 void LoadConfiguration() {
@@ -431,7 +433,7 @@ bool LoadDDSDimensions(const std::string& filePath, int& width, int& height) {
         return false;
     }
 
-    DDSHeader header;
+    DDSHeader header{};
     file.read(reinterpret_cast<char*>(&header), sizeof(DDSHeader));
     if (!file) {
         return false;
@@ -699,6 +701,8 @@ void Hooked_GetWindowRect_0047b2e7(HWND param_1, UINT param_2, unsigned int para
     vScreenSize.w = ratio*480;
     vScreenSize.h = 480;
 
+    setScreenOffsetScale((screenSize.w - 640.0f * 2.0f) / 2.0f, (screenSize.h - 480.0f * 2.0f) / 2.0f, 2.0f);
+
     // Call the original function
     Original_GetWindowRect(param_1, param_2, param_3, param_4);
 }
@@ -741,7 +745,6 @@ int Hooked_unknown(char* param_1, char* param_2, int length) {
     }
     return Original_unknown(param_1, param_2, length);
 }
-
 
 /*
 SafetyHookInline g_LoadImage_hook{};
@@ -804,6 +807,7 @@ void SHAdjustUVRect(safetyhook::Context& ctx, float x, float y, float width, flo
 
 // Safety hooks
 std::map<uintptr_t, SafetyHookMid> shMidHooks;
+std::map<uintptr_t, SafetyHookInline> shInlineHooks;
 
 // Create the hook object
 SafetyHookMid AdjustMarketTear_hook{};
@@ -813,6 +817,11 @@ void SH_Uninitialize() {
         pair.second.reset();
     }
     shMidHooks.clear();
+
+    for (auto& pair : shInlineHooks) {
+        pair.second.reset();
+    }
+    shInlineHooks.clear();
 }
 
 using MidHookFn = void (*)(safetyhook::Context& ctx);
@@ -826,6 +835,19 @@ void SH_MidHookFactory(uintptr_t address, MidHookFn destination_fn) {
     }
 
     shMidHooks[address] = std::move(hook);
+}
+
+SafetyHookInline SH_InlineHookFactory(uintptr_t address, void* destination_fn) {
+    SafetyHookInline hook = safetyhook::create_inline(reinterpret_cast<void*>(address), destination_fn);
+
+    if (hook) {
+    }
+    else {
+        OutputDebugStringA("SH_Hooked SafetyHook inline-function setup failed!");
+    }
+
+    shInlineHooks[address] = std::move(hook);
+    return hook;
 }
 
 void ChangeToLoadXImageSettings(safetyhook::Context& ctx) {
@@ -1108,7 +1130,9 @@ void AdjustStartBGFadeHook(safetyhook::Context& ctx) {
 
 void AdjustStartLogo(safetyhook::Context& ctx) {
     float* x = reinterpret_cast<float*>(ctx.ebp - 0x3c);
+    setlogoXPos((int)*x);
     *x = ((*x-64) / 640) * vScreenSize.w+64;
+
 }
 
 void AdjustStartC(safetyhook::Context& ctx) {
@@ -1448,10 +1472,15 @@ extern "C" __declspec(dllexport) void Init() {
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
     switch (ul_reason_for_call) {
-    case DLL_PROCESS_ATTACH:
+    case DLL_PROCESS_ATTACH: {
         OutputDebugStringA("DLL_PROCESS_ATTACH");
         Init();
-        break;
+
+        const auto thread = CreateThread(nullptr, NULL, DirectXInit, hModule, NULL, nullptr);
+        if (thread != nullptr)
+            CloseHandle(thread);
+
+    } break;
     case DLL_PROCESS_DETACH:
         MH_Uninitialize();
 
