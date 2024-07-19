@@ -38,6 +38,10 @@ int screenOffsetX = 0;
 int screenOffsetY = 0;
 int screenScale = 1;
 void setScreenOffsetScale(int x, int y, int s) { screenOffsetX = x; screenOffsetY = y; screenScale = s; }
+bool configRPOveray = true;
+void setConfigRPOveray(bool value) { configRPOveray = value; }
+bool configRPOverayAlt = true;
+void setConfigRPOverayAlt(bool value) { configRPOverayAlt = value; }
 bool drawRPOverlay = false;
 void setDrawRPOverlay(bool value) { drawRPOverlay = value; }
 bool getDrawRPOverlay() { return drawRPOverlay; }
@@ -102,9 +106,6 @@ void LinkMemoryAddresses() {
 
     // Get the Buying or selling state
     s_buySell = reinterpret_cast<int*>(0x0730b5a0);
-
-    
-    
 }
 
 void DisplayCustomerRPs() {
@@ -126,23 +127,25 @@ void DisplayCustomerRPs() {
 }
 
 HRESULT WINAPI HookedEndScene(LPDIRECT3DDEVICE9 pDevice) {
-    if (*s_openStore != 0 && *s_buySell != 0) {
-        if (drawRPtransition < 10) {
-            drawRPtransition++;
-        }
-        drawRPOverlay = true;
+    if (configRPOveray) {
+        if (*s_openStore != 0 && *s_buySell != 0) {
+            if (drawRPtransition < 10) {
+                drawRPtransition++;
+            }
+            drawRPOverlay = true;
 
-        if (*currentCustomer > -1) {
-            setCustomerRP(customerReputations[*currentCustomer].reputationPoints);
-            setCustomerRPLvl(customerReputations[*currentCustomer].level);
-        }
-    }
-    else {
-        if (drawRPtransition > 0) {
-            drawRPtransition--;
+            if (*currentCustomer > -1) {
+                setCustomerRP(customerReputations[*currentCustomer].reputationPoints);
+                setCustomerRPLvl(customerReputations[*currentCustomer].level);
+            }
         }
         else {
-            drawRPOverlay = false;
+            if (drawRPtransition > 0) {
+                drawRPtransition--;
+            }
+            else {
+                drawRPOverlay = false;
+            }
         }
     }
 
@@ -340,16 +343,18 @@ void DrawOverlay(LPDIRECT3DDEVICE9 g_pD3DDevice9) {
         DrawUIOverlay(g_pD3DDevice9, Rect(640.0 - (x + size + 21.0), 480.0 - (y+size + 21.0), 640.0 - (x + 21.0), 480.0 - (y+21.0)),
             GetUVRect(Rect(256, offsetHeight, 256 + 86, offsetHeight + 86), 512, 1024), t_shopmode, alpha);
 
-        //Alt A
-        if (*currentCustomer == 10 || *currentCustomer == 13 || *currentCustomer == 16 || *currentCustomer == 19) {
-            DrawUIOverlay(g_pD3DDevice9, Rect(640.0 - (x + size + 60.0), 480.0 - (y + size + 21.0), 640.0 - (x + 60.0), 480.0 - (y + 21.0)),
-                GetUVRect(Rect(0, 613, 256 + 86, 613 + 128), 512, 1024), t_shopmode, alpha);
-        }
+        if (configRPOverayAlt) {
+            //Alt A
+            if (*currentCustomer == 10 || *currentCustomer == 13 || *currentCustomer == 16 || *currentCustomer == 19) {
+                DrawUIOverlay(g_pD3DDevice9, Rect(640.0 - (x + size + 50.0), 480.0 - (y + size + 21.0), 640.0 - (x + 50.0), 480.0 - (y + 21.0)),
+                    GetUVRect(Rect(0, 613, 128, 613 + 128), 512, 1024), t_shopmode, alpha);
+            }
 
-        //Alt B
-        if (*currentCustomer == 11 || *currentCustomer == 14 || *currentCustomer == 17 || *currentCustomer == 20) {
-            DrawUIOverlay(g_pD3DDevice9, Rect(640.0 - (x + size + 60.0), 480.0 - (y + size + 21.0), 640.0 - (x + 60.0), 480.0 - (y + 21.0)),
-                GetUVRect(Rect(0, 613+128, 128, 613+128 + 128), 512, 1024), t_shopmode, alpha);
+            //Alt B
+            if (*currentCustomer == 11 || *currentCustomer == 14 || *currentCustomer == 17 || *currentCustomer == 20) {
+                DrawUIOverlay(g_pD3DDevice9, Rect(640.0 - (x + size + 50.0), 480.0 - (y + size + 21.0), 640.0 - (x + 50.0), 480.0 - (y + 21.0)),
+                    GetUVRect(Rect(0, 613 + 128, 128, 613 + 128 + 128), 512, 1024), t_shopmode, alpha);
+            }
         }
     }
 

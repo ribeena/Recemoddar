@@ -11,6 +11,8 @@
 //LPDIRECT3DDEVICE9 g_pd3dDevice;
 
 void setScreenOffsetScale(int x, int y, int s);
+void setConfigRPOveray(bool value);
+void setConfigRPOverayAlt(bool value);
 void setDrawRPOverlay(bool value);
 bool getDrawRPOverlay();
 void setDrawRPtransition(int value);
@@ -19,6 +21,7 @@ int getDrawRPtransition();
 void setCustomerRP(int value);
 void setCustomerRPLvl(int value);
 void setlogoXPos(int value);
+int GetCustomerAlt();
 
 DWORD WINAPI DirectXInit(__in  LPVOID lpParameter);
 

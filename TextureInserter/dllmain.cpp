@@ -112,6 +112,16 @@ void LoadConfiguration() {
         }
 
         // Check if the section "Debug"
+        auto overlaySection = parser.getSection("Overlay");
+        if (overlaySection.find("ShowCustomerReputations") != overlaySection.end()) {
+            setConfigRPOveray(overlaySection["ShowCustomerReputations"] == 1);
+        }
+
+        if (overlaySection.find("ShowCustomerAlt") != overlaySection.end()) {
+            setConfigRPOverayAlt(overlaySection["ShowCustomerAlt"] == 1);
+        }
+
+        // Check if the section "Debug"
         auto debugSection = parser.getSection("Debug");
         if (debugSection.find("ImagesFound") != debugSection.end()) {
             debugImagesFound = debugSection["ImagesFound"]==1;
@@ -289,6 +299,7 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
 
     // Find the position of the file extension
     char* dotPos = strrchr(originalFilename, '.');
+
     if (dotPos != nullptr) {
         modFilenames(originalFilename, filename1x, filename2x, filename2xDDS, filename4x, filename4xDDS);
 
@@ -299,7 +310,7 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
             newheight *= 4;
             scaleFlag = 4;
             if (debugImagesFound) {
-                sprintf_s(debugMessage, "4HD DDS File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
+                sprintf_s(debugMessage, "4HD DDS File found: %s (%i,%i,%i)", filename, width, height, formatType);
                 OutputDebugStringA(debugMessage);
             }
         } else if (fileExists(filename4x)) {
@@ -309,7 +320,7 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
             newheight *= 4;
             scaleFlag = 4;
             if (debugImagesFound) {
-                sprintf_s(debugMessage, "4HD File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
+                sprintf_s(debugMessage, "4HD File found: %s (%i,%i,%i)", filename, width, height, formatType);
                 OutputDebugStringA(debugMessage);
             }
         }
@@ -320,7 +331,7 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
             newheight *= 2;
             scaleFlag = 2;
             if (debugImagesFound) {
-                sprintf_s(debugMessage, "2HD DDS File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
+                sprintf_s(debugMessage, "2HD DDS File found: %s (%i,%i,%i)", filename, width, height, formatType);
                 OutputDebugStringA(debugMessage);
             }
         }
@@ -331,7 +342,7 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
             newheight *= 2;
             scaleFlag = 2;
             if (debugImagesFound) {
-                sprintf_s(debugMessage, "2HD File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
+                sprintf_s(debugMessage, "2HD File found: %s (%i,%i,%i)", filename, width, height, formatType);
                 OutputDebugStringA(debugMessage);
             }
         }
@@ -339,7 +350,7 @@ void HookedLoadImage(int formatType, astruct* imageDataPtr, char* filename, int 
             strcpy_s(newFilename, filename1x);
             filename = newFilename;
             if (debugImagesFound) {
-                sprintf_s(debugMessage, "Mod File found: %s (%i,%i,%i) - encoded from %i", filename, width, height, formatType, imageDataPtr->format);
+                sprintf_s(debugMessage, "Mod File found: %s (%i,%i,%i)", filename, width, height, formatType);
                 OutputDebugStringA(debugMessage);
             }
         }

@@ -83,6 +83,10 @@ You can also adjust some offsets which might help with layout issues.
 letterboxed when set to `1` will try to honor letter boxing (largely 
 untested currently).
 
+You can turn off the customer relationship bar and number. Thanks goes to
+[seronis](https://fearlessrevolution.com/viewtopic.php?t=803) for the memory
+addresses.
+
 Sample ini file
 ```
 [General]
@@ -92,9 +96,13 @@ EventOffscreenAdjustment=-1
 EventOffscreenTestValue=340
 EventVerticalOffset=-10
 
+[Overlay]
+ShowCustomerReputations=1
+ShowCustomerAlt=1
+
 [WidescreenBackgrounds]
-bmp/ivent/bg_guild.bmp=6
 bmp/ivent/kuro.tga=8
+bmp/ivent/bg_guild.bmp=6
 bmp/ivent/bg_myroom.bmp=6
 bmp/ivent/bg_myroom2.bmp=6
 bmp/ivent/bg_myroom3.bmp=6
@@ -109,7 +117,6 @@ bmp/worldmap_night.bmp=6
 bmp/worldmap_nomal.bmp=6
 bmp/worldmap_yugata.bmp=6
 bmp/boukenguild_bg.bmp=6
-bmp/pause_bg_rete.tga=6
 
 [Debug]
 ImagesSearched=0
@@ -125,10 +132,11 @@ to see the debugging messages.
 
 ## BUGS!
 Yes - proof of concept means bugs!
-- `setDDTexture...` error happens because the patches cause memory leaks, save
-  and restart your game! Thanks to "Just Harry"s memory sluething this takes longer
+- `setDDTexture...` error happens because these hooks/patches cause memory leaks, save
+  and restart your game! Thanks to "Just Harry"s memory sluething this takes longer,
+  but can still pop up.
 - `OUT_OF_MEMORY` see above - too late to save now!
-- To allow external file loading the function at 0x00471b24 is ovveridden and
+- To allow external file loading the function at 0x00471b24 is overidden and
   uses 0x0047193C to load the files - these call a later function with param_6 
   set to 1 instead of 0... unsure what effect this will have!
 - wide screen fix calculation might be off for anything other than 1920x1080
