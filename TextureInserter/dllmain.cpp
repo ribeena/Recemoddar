@@ -19,6 +19,9 @@
 #include <string>
 #include <regex>
 
+#define FancyScreenPatchForRecettearTargetVersion 5
+#include "fancy_screen_patch_for_recettear_integration.h"
+
 #if _WIN64
 #pragma comment(lib, "libMinHook.x64.lib")
 #else
@@ -1411,6 +1414,29 @@ void CreateMinHooks() {
     OutputDebugStringA("Hooked modded files redirect successfully");
 }
 
+void InitFancyScreenPatchIntegration() {
+    auto exe = FSP_getAddressOfRecettearExecutable();
+    auto exeSections = FSP_findSections(exe);
+    auto fsp = FSP_verifySectionsAndGetAddresses(exeSections);
+
+    if (!fsp.data) {
+        OutputDebugStringA("The Fancy Screen Patch does not seem to be installed");
+        return;
+    }
+
+    if (fsp.data->version >= 5) {
+        const auto& functions = *fsp.data->functionTable->functions;
+        functions.startDisablingLeftPillarbox();
+        functions.startDisablingRightPillarbox();
+        functions.startDisablingUpperLetterbox();
+        functions.startDisablingLowerLetterbox();
+
+        OutputDebugStringA("All of the Fancy Screen Patch's black bars have been disabled");
+    } else {
+        OutputDebugStringA("The installed Fancy Screen Patch is too old of a version to do anything with");
+    }
+}
+
 extern "C" __declspec(dllexport) void Init() {
     //Get configuration file
     LoadConfiguration();
@@ -1479,6 +1505,8 @@ extern "C" __declspec(dllexport) void Init() {
     //}
     //OutputDebugStringA("SH_Hooked SafetyHook successfully set up!");
 
+    // Detect and integrate with the Fancy Screen Patch for Recettear.
+    InitFancyScreenPatchIntegration();
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
